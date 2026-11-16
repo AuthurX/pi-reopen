@@ -28,3 +28,29 @@ export function paneExists(paneId, { wezterm, env = process.env, runner, timeout
 		return undefined;
 	}
 }
+
+/** wezterm cli spawn 的 stdout 是新 pane 的数字 id。 */
+export function parsePaneId(stdout) {
+	const match = /(\d+)/.exec(String(stdout ?? "").trim());
+	return match ? Number(match[1]) : undefined;
+}
+
+/** 标题单行化并限长，避免控制字符或超长标题污染标签栏。 */
+export function sanitizeTitle(title, maxLength = 60) {
+	const flat = String(title ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+	if (!flat) return undefined;
+	return [...flat].slice(0, maxLength).join("");
+}
+
+/** 设置标签页标题；失败不影响恢复结果（标题只是装饰）。 */
+export function setTabTitle({ wezterm, paneId, title, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
+	const clean = sanitizeTitle(title);
+	if (!Number.isSafeInteger(paneId) || paneId <= 0 || !clean) return false;
+	const run = runner ?? ((program, args) =>
+		spawnSync(program, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
+	try {
+		return run(wezterm || "wezterm", ["cli", "set-tab-title", "--pane-id", String(paneId), clean])?.status === 0;
+	} catch {
+		return false;
+	}
+}

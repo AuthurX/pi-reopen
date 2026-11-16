@@ -11,9 +11,10 @@ import { listMembers, writeMember } from '../src/members.js';
 import { CLAIM_TTL_MS, claimSession, readClaim, sweepClaims } from '../src/claims.js';
 import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
+import { parsePaneId, sanitizeTitle } from '../src/pane.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { EXIT, exitCodeFor, inspect, runRestore, summarize } from '../src/restore.js';
+import { EXIT, exitCodeFor, inspect, runRestore, summarize, tabTitle } from '../src/restore.js';
 import { run as cliRun, displayWidth } from '../src/cli.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
@@ -321,6 +322,42 @@ test('runRestore reports failure without spawning when every restorable is claim
   assert.equal(result.ok, false);
   assert.equal(result.results[0].state, 'claimed');
   assert.match(summarize(result).join('\n'), /其他恢复进程正在启动，跳过/);
+});
+
+test('tab titles prefer the session name, then the cwd basename, and are sanitized', () => {
+  assert.equal(tabTitle({ name: 'my-session', cwd: '/work/proj' }), 'my-session');
+  assert.equal(tabTitle({ cwd: '/work/proj' }), 'proj');
+  assert.equal(tabTitle({ sessionId: 'abc' }), 'abc');
+  assert.equal(parsePaneId('42'), 42);
+  assert.equal(parsePaneId('pane 7\n'), 7);
+  assert.equal(parsePaneId(''), undefined);
+  assert.equal(sanitizeTitle('a\nb\tc'), 'a b c');
+  assert.equal(sanitizeTitle('   '), undefined);
+  assert.equal([...sanitizeTitle('x'.repeat(100))].length, 60);
+});
+
+test('restore sets a tab title from the spawn pane id', async (t) => {
+  const f = fixture(t);
+  const named = { ...liveEntry(f.paths, 'named', { name: 'my-session' }), ...(await deadIdentity()) };
+  const unnamed = { ...liveEntry(f.paths, 'unnamed', { name: undefined }), ...(await deadIdentity()) };
+  writeMember(named, f.paths);
+  writeMember(unnamed, f.paths);
+  fs.writeFileSync(join(f.home, 'wez.exe'), 'MZ');
+  const titles = [];
+  const result = await runRestore({
+    env: { HOME: f.home, PI_WORKSPACE_WEZTERM: join(f.home, 'wez.exe') },
+    platform: 'linux',
+    paths: f.paths,
+    noWait: true,
+    owners: new Map(),
+    prober: () => ({ status: 0, stdout: 'wezterm 1.0' }),
+    piProber: () => ({ status: 0, stdout: '/usr/bin/pi' }),
+    spawner: async () => ({ ok: true, stdout: '77' }),
+    titleSetter: (args) => { titles.push(args); return true; },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(titles.map((call) => call.title), ['my-session', 'agent']);
+  assert.deepEqual(titles.map((call) => call.paneId), [77, 77]);
 });
 
 test('exit codes separate failures, unverified starts and skipped work', () => {

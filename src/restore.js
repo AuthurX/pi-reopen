@@ -4,7 +4,9 @@ import { buildRestorePlan } from "./plan.js";
 import { preflight } from "./preflight.js";
 import { openTab } from "./spawn.js";
 import { workspacePaths } from "./paths.js";
+import { basename } from "node:path";
 import { scanSessionOwners } from "./inuse.js";
+import { parsePaneId, setTabTitle } from "./pane.js";
 import { runtimePlatform } from "./platform.js";
 import { currentBootId } from "./liveness.js";
 import { waitForMembers } from "./verify.js";
@@ -24,6 +26,11 @@ export function label(state) {
 	return STATE_LABEL[state] ?? state;
 }
 
+/** 标签页标题：优先会话名，否则工作目录的文件夹名（需求 13）。 */
+export function tabTitle(entry) {
+	return entry?.name || (entry?.cwd ? basename(entry.cwd) : entry?.sessionId);
+}
+
 /** 只读：列出全部成员与状态（list / dry-run 共用）。 */
 export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro } = {}) {
 	const members = listMembers(paths);
@@ -37,6 +44,18 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 		distro: distro ?? env.WSL_DISTRO_NAME,
 	});
 	return { members, plan };
+}
+
+/** 开完标签页后设置标题；失败只影响外观，不影响恢复结果。 */
+export async function setTitle({ wezterm, stdout, entry, env = process.env, titleSetter = setTabTitle } = {}) {
+	const paneId = parsePaneId(stdout);
+	const title = tabTitle(entry);
+	if (!paneId || !title) return false;
+	try {
+		return await titleSetter({ wezterm, paneId, title, env });
+	} catch {
+		return false;
+	}
 }
 
 /** 连续请求失败达此值时提前停止（WezTerm 多半已卡死，继续只会堆积更多超时等待）。 */
@@ -58,6 +77,7 @@ export async function runRestore({
 	prober,
 	piProber,
 	owners,
+	titleSetter,
 } = {}) {
 	const pre = preflight({ env, platform, prober, piProber });
 	if (!pre.ok) {
@@ -103,6 +123,7 @@ export async function runRestore({
 			if (spawnResult.ok) {
 				consecutiveFailures = 0;
 				results.push({ ...item, requested: true });
+				await setTitle({ wezterm: pre.wezterm, stdout: spawnResult.stdout, entry: item.entry, env, titleSetter });
 			} else {
 				consecutiveFailures++;
 				results.push({ ...item, requested: false, requestError: spawnResult.error });

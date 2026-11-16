@@ -229,6 +229,7 @@ export default async function (pi: ExtensionAPI) {
 				sessionFile: entry.sessionFile,
 			});
 			if (result.ok) {
+				await restore.setTitle({ wezterm: pre.wezterm, stdout: result.stdout, entry, env: process.env });
 				members.writeMember({
 					...entry,
 					pid: undefined,
