@@ -13,7 +13,7 @@ const ON_WSL = fs.existsSync('/run/WSL');
 const wslOnly = { skip: ON_WSL ? false : '仅 WSL（需 /run/WSL 互操作）' };
 
 // 用真实 Node（原生 TS 类型剥离）加载扩展模块，配合假 Pi API 验证接线与生命周期。
-async function loadExtension(t) {
+async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
   const home = fs.mkdtempSync(join(tmpdir(), 'pi-ws-ext-'));
   const originalSignals = new Map(['SIGHUP', 'SIGTERM'].map(s => [s, process.listeners(s)]));
   t.after(() => {
@@ -23,13 +23,14 @@ async function loadExtension(t) {
       }
     }
     fs.rmSync(home, { recursive: true, force: true });
-    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM']) delete process.env[key];
+    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM',
+      'WEZTERM_PANE', 'PI_WORKSPACE_PANE_ALIVE']) delete process.env[key];
   });
   process.env.PI_CODING_AGENT_DIR = join(home, '.pi', 'agent');
   process.env.PI_WORKSPACE_SRC = join(project, 'src');
   process.env.PI_WORKSPACE_WEZTERM = join(home, 'wez.exe');
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');
-  process.env.PI_WORKSPACE_HOOKS = join(project, 'test', 'fixtures', 'test-hooks.mjs');
+  process.env.PI_WORKSPACE_HOOKS = join(project, 'test', 'fixtures', hooks);
 
   const raw = fs.readFileSync(join(project, 'extensions/open-all.ts'), 'utf8');
   const source = stripTypeScriptTypes(raw)
@@ -116,6 +117,23 @@ for (const signal of ['SIGHUP', 'SIGTERM']) {
     assert.equal(f.memberCount(), 1, 'terminal shutdown must not delete the restore member');
   });
 }
+
+test('quit keeps the member when the WezTerm pane is already gone (window close without a signal)', async (t) => {
+  const f = await loadExtension(t, { hooks: 'pane-hooks.mjs' });
+  process.env.WEZTERM_PANE = '42';
+  f.events.session_start({}, f.context);
+  await f.events.session_shutdown({ reason: 'quit' }, f.context);
+  assert.equal(f.memberCount(), 1, 'pane 已消失 → 被动死亡 → 必须保留记录');
+});
+
+test('quit removes the member when the pane still exists (deliberate /quit)', async (t) => {
+  const f = await loadExtension(t, { hooks: 'pane-hooks.mjs' });
+  process.env.WEZTERM_PANE = '42';
+  process.env.PI_WORKSPACE_PANE_ALIVE = '1';
+  f.events.session_start({}, f.context);
+  await f.events.session_shutdown({ reason: 'quit' }, f.context);
+  assert.equal(f.memberCount(), 0, 'pane 还在 → 用户主动退出 → 排除');
+});
 
 test('reload cleans up signal listeners without accumulating duplicates', async (t) => {
   const f = await loadExtension(t);

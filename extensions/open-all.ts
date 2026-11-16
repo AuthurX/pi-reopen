@@ -38,6 +38,7 @@ export default async function (pi: ExtensionAPI) {
 	const claims = await load("claims.js");
 	const restore = await load("restore.js");
 	const spawn = await load("spawn.js");
+	const pane = await load("pane.js");
 	const preflightMod = await load("preflight.js");
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
@@ -94,12 +95,35 @@ export default async function (pi: ExtensionAPI) {
 		claims.releaseClaim(currentSessionId, paths);
 	}
 
+	/**
+	 * 关窗判定的第二道保险：Pi 在 SIGHUP/SIGTERM 之外也可能发出 quit。
+	 * 此时若 WezTerm 里本 pane 已经消失，说明是窗口被关闭（被动死亡）而不是主动 /quit，
+	 * 记录必须保留，否则该会话会从恢复集合里永久丢失。
+	 * 返回 true 表示“按被动死亡处理，保留记录”。
+	 */
+	async function paneGone(): Promise<boolean> {
+		const paneId = pane.currentPaneId(process.env);
+		if (!paneId) return false;
+		try {
+			const hooks = await loadHooks();
+			const probe = typeof hooks.paneExists === "function"
+				? hooks.paneExists
+				: (id: number) => pane.paneExists(id, { wezterm: process.env.PI_WORKSPACE_WEZTERM, env: process.env });
+			const alive = await probe(paneId);
+			// false 或无法判断（undefined）都保守地按“已消失”处理：宁可多恢复一次，不丢会话。
+			return alive !== true;
+		} catch {
+			return true;
+		}
+	}
+
 	pi.on("session_shutdown", async (event: any) => {
 		// Pi also emits quit for SIGHUP/SIGTERM. Let all signal listeners run first.
 		if (event.reason === "quit") await new Promise<void>((resolve) => setImmediate(resolve));
 		try {
 			if (!currentSessionId || event.reason === "reload") return;
 			if (event.reason === "quit" && signalExit) return;
+			if (event.reason === "quit" && (await paneGone())) return;
 			if (["quit", "new", "resume", "fork"].includes(event.reason)) {
 				members.deleteMember(currentSessionId, paths);
 			}
