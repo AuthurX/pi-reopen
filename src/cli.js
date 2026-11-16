@@ -8,20 +8,33 @@ import { forgetMembers, maxAgeMsFromEnv, pruneMembers, resolveMemberIds } from "
 import { exitCodeFor, inspect, label, runRestore, summarize } from "./restore.js";
 import { preflight } from "./preflight.js";
 import { runtimePlatform } from "./platform.js";
+import { packageVersion } from "./version.js";
 
 const USAGE = `pi-reopen — 恢复上次的 Pi 终端组合
 
 用法：
   pi-reopen                       # 补开上次关闭时仍打开的 Pi（已运行的跳过）
-  pi-reopen restore --dry-run     # 只看计划，不开标签页
+  pi-reopen restore [选项]        # 显式恢复；选项见下
+  pi-reopen --dry-run             # 等价于 restore --dry-run
+  pi-reopen --help | --version    # 用法 / 版本号
   pi-reopen list [--wide]         # 查看登记成员与状态（长内容默认按终端宽度截断，--wide 不截断）
   pi-reopen forget <id|前缀> ...  # 删除指定登记（不删除对话文件）
   pi-reopen prune [--dry-run]     # 清理过期/无法恢复的记录（默认保留最近 14 天）
   pi-reopen doctor                # 环境检查（平台 / WezTerm / pi / 进程身份）
   pi-reopen clear                 # 清空登记（不删除对话文件）
 
+restore 选项：
+  --dry-run            只打印计划，不开标签页
+  --no-wait            发出请求后立即返回，不等待 pi 登记确认
+  --json               输出机器可读的 JSON（便于脚本消费）
+  --only <模式>        只恢复匹配的会话；子串或 * 通配符，可重复/逗号分隔
+  --limit <N>          本次最多开 N 个标签页（其余保留待下次）
+  --yes                跳过批量确认提示
+
 每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
-默认在全部请求发出后等待各 pi 启动并登记再报告，--no-wait 跳过该等待。`;
+默认在全部请求发出后等待各 pi 启动并登记再报告，--no-wait 跳过该等待。
+
+退出码：0 成功；1 请求失败/用法错误；2 预检失败；3 请求已发但未确认；4 仅有跳过项。`;
 
 /** 单字符显示宽度：CJK/全角记 2，其余记 1（东亚宽度简化表）。 */
 function charWidth(cp) {
@@ -35,6 +48,69 @@ function charWidth(cp) {
 		(cp >= 0x20000 && cp <= 0x2fffd) || (cp >= 0x30000 && cp <= 0x3fffd)
 	) return 2;
 	return 1;
+}
+
+/** 把“裸 flag”归一化为 restore：pi-reopen --dry-run 等同于 restore --dry-run。 */
+export function normalizeArgv(argv = []) {
+	const [first, ...rest] = argv;
+	if (first === "help" || first === "--help" || first === "-h") return { command: "help", flags: rest };
+	if (first === "version" || first === "--version" || first === "-v") return { command: "version", flags: rest };
+	if (!first || first.startsWith("-")) return { command: "restore", flags: argv };
+	return { command: first, flags: rest };
+}
+
+/** 收集 --only 模式（支持 --only a,b 与 --only=a）。 */
+export function collectOnly(flags = []) {
+	const patterns = [];
+	for (let i = 0; i < flags.length; i++) {
+		const flag = flags[i];
+		if (flag === "--only") {
+			const value = flags[i + 1];
+			if (value && !value.startsWith("-")) patterns.push(...value.split(","));
+		} else if (flag.startsWith("--only=")) {
+			patterns.push(...flag.slice("--only=".length).split(","));
+		}
+	}
+	return patterns.map((p) => p.trim()).filter(Boolean);
+}
+
+function flagValue(flags, name) {
+	for (let i = 0; i < flags.length; i++) {
+		if (flags[i] === name && i + 1 < flags.length) return flags[i + 1];
+		if (flags[i].startsWith(`${name}=`)) return flags[i].slice(name.length + 1);
+	}
+	return undefined;
+}
+
+/** restore 的机器可读输出。 */
+export function jsonPayload(result, code) {
+	const items = (result.plan?.items ?? []).map((item) => ({
+		sessionId: item.entry.sessionId,
+		name: item.entry.name,
+		cwd: item.entry.cwd,
+		state: item.state,
+	}));
+	const results = (result.results ?? []).map((item) => ({
+		sessionId: item.entry.sessionId,
+		name: item.entry.name,
+		cwd: item.entry.cwd,
+		state: item.state,
+		requested: !!item.requested,
+		error: item.requestError,
+	}));
+	const verified = new Set(result.verification?.verified ?? []);
+	for (const item of results) {
+		if (item.requested) item.verified = verified.has(item.sessionId);
+	}
+	return {
+		stage: result.stage,
+		ok: !!result.ok,
+		exitCode: code,
+		checks: result.checks,
+		plan: result.plan ? { items } : undefined,
+		results,
+		verification: result.verification,
+	};
 }
 
 export function displayWidth(str) {
@@ -91,7 +167,7 @@ function listLines({ plan }, { termWidth = 80 } = {}) {
 }
 
 export async function run(argv = [], { stdout = process.stdout, env = process.env } = {}) {
-	const [command, ...flags] = argv;
+	const { command, flags } = normalizeArgv(argv);
 	const hasFlag = (name) => flags.includes(name);
 	const write = (line) => {
 		try {
@@ -106,18 +182,52 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 		throw err;
 	});
 
-	switch (command ?? "restore") {
+	switch (command) {
+		case "help": {
+			write(USAGE);
+			return 0;
+		}
+		case "version": {
+			write(`pi-reopen ${packageVersion()}`);
+			return 0;
+		}
 		case "restore": {
-			const result = await runRestore({ env, dryRun: hasFlag("--dry-run"), noWait: hasFlag("--no-wait") });
-			for (const line of summarize(result)) write(line);
-			return exitCodeFor(result);
+			const limitRaw = Number(flagValue(flags, "--limit"));
+			const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : undefined;
+			const result = await runRestore({
+				env,
+				dryRun: hasFlag("--dry-run"),
+				noWait: hasFlag("--no-wait"),
+				only: collectOnly(flags),
+				limit,
+			});
+			const code = exitCodeFor(result);
+			if (hasFlag("--json")) {
+				write(JSON.stringify(jsonPayload(result, code), null, 2));
+			} else {
+				for (const line of summarize(result)) write(line);
+			}
+			return code;
 		}
 		case "list": {
 			const wide = hasFlag("--wide");
+			const inspected = inspect({ paths: workspacePaths(env), env });
+			if (hasFlag("--json")) {
+				write(JSON.stringify({
+					members: inspected.plan.items.map((item) => ({
+						sessionId: item.entry.sessionId,
+						name: item.entry.name,
+						cwd: item.entry.cwd,
+						ts: item.entry.ts,
+						state: item.state,
+					})),
+				}, null, 2));
+				return 0;
+			}
 			let columns = Number(stdout?.columns);
 			if (!Number.isFinite(columns) || columns <= 0) columns = Number(env.COLUMNS);
 			if (!Number.isFinite(columns) || columns <= 0) columns = 80;
-			const lines = listLines(inspect({ paths: workspacePaths(env) }), {
+			const lines = listLines(inspected, {
 				termWidth: wide ? Number.POSITIVE_INFINITY : columns,
 			});
 			for (const line of lines) write(line);

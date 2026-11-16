@@ -9,14 +9,14 @@ import { workspacePaths } from '../src/paths.js';
 import { currentBootId, isLive, processStart } from '../src/liveness.js';
 import { listMembers, writeMember } from '../src/members.js';
 import { CLAIM_TTL_MS, claimSession, readClaim, releaseClaim, sweepClaims } from '../src/claims.js';
-import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
+import { buildRestorePlan, matchesOnly, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { parsePaneId, sanitizeTitle } from '../src/pane.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
 import { EXIT, exitCodeFor, inspect, runRestore, summarize, tabTitle } from '../src/restore.js';
 import { forgetMembers, pruneMembers, resolveMemberIds } from '../src/prune.js';
-import { run as cliRun, displayWidth } from '../src/cli.js';
+import { collectOnly, displayWidth, jsonPayload, normalizeArgv, run as cliRun } from '../src/cli.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
 const project = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -377,6 +377,64 @@ test('restore sets a tab title from the spawn pane id', async (t) => {
   assert.equal(result.ok, true);
   assert.deepEqual(titles.map((call) => call.title), ['my-session', 'agent']);
   assert.deepEqual(titles.map((call) => call.paneId), [77, 77]);
+});
+
+test('CLI entry conventions: --help and --version succeed instead of printing usage', async () => {
+  const out = [];
+  const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
+  assert.equal(await cliRun(['--help'], { stdout, env: {} }), 0);
+  assert.match(out.join('\n'), /--only/);
+  out.length = 0;
+  assert.equal(await cliRun(['--version'], { stdout, env: {} }), 0);
+  assert.match(out.join('\n'), /^pi-reopen \d+\.\d+\.\d+/);
+  out.length = 0;
+  assert.equal(await cliRun(['help'], { stdout, env: {} }), 0);
+  assert.equal(await cliRun(['-h'], { stdout, env: {} }), 0);
+});
+
+test('bare flags normalize to restore, and --only patterns are collected', () => {
+  assert.deepEqual(normalizeArgv([]), { command: 'restore', flags: [] });
+  assert.deepEqual(normalizeArgv(['--dry-run']), { command: 'restore', flags: ['--dry-run'] });
+  assert.deepEqual(normalizeArgv(['list', '--wide']), { command: 'list', flags: ['--wide'] });
+  assert.deepEqual(normalizeArgv(['-h']), { command: 'help', flags: [] });
+  assert.deepEqual(normalizeArgv(['version']), { command: 'version', flags: [] });
+  assert.deepEqual(collectOnly(['--only', 'a,b', '--only=c']), ['a', 'b', 'c']);
+  assert.deepEqual(collectOnly(['--only']), []);
+});
+
+test('--only matches names, paths and globs and marks the rest filtered', (t) => {
+  assert.equal(matchesOnly({ name: 'api-refactor', cwd: '/w/a' }, 'refactor'), true);
+  assert.equal(matchesOnly({ name: 'x', cwd: '/w/shop' }, 'SHOP'), true);
+  assert.equal(matchesOnly({ name: 'x', cwd: '/w/shop' }, 'web*'), false);
+  assert.equal(matchesOnly({ name: 'web-shop', cwd: '/w/shop' }, 'web*'), true);
+  const f = fixture(t);
+  writeMember({ ...liveEntry(f.paths, 'keep'), pid: undefined, name: 'api-refactor' }, f.paths);
+  writeMember({ ...liveEntry(f.paths, 'drop'), pid: undefined, name: 'web-shop' }, f.paths);
+  const { plan } = inspect({ paths: f.paths, owners: new Map(), platform: 'wsl', distro: 'Arch', only: ['refactor'] });
+  const byId = Object.fromEntries(plan.items.map((i) => [i.entry.sessionId, i.state]));
+  assert.equal(byId['keep'], 'restorable');
+  assert.equal(byId['drop'], 'filtered');
+});
+
+test('list --json and restore --json emit machine-readable payloads', async (t) => {
+  const f = fixture(t);
+  writeMember({ ...liveEntry(f.paths, 'json-entry'), pid: undefined }, f.paths);
+  const out = [];
+  const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
+  const env = { ...f.env, PI_CODING_AGENT_DIR: f.paths.agent };
+  assert.equal(await cliRun(['list', '--json'], { stdout, env }), 0);
+  const list = JSON.parse(out.join('\n'));
+  assert.equal(list.members[0].sessionId, 'json-entry');
+  assert.equal(list.members[0].state, 'restorable');
+  out.length = 0;
+  const broken = { ...env, PI_WORKSPACE_WEZTERM: join(f.home, 'missing-wezterm') };
+  const code = await cliRun(['restore', '--dry-run', '--json'], { stdout, env: broken });
+  assert.equal(code, 2);
+  const payload = JSON.parse(out.join('\n'));
+  assert.equal(payload.stage, 'preflight');
+  assert.equal(payload.exitCode, 2);
+  assert.ok(payload.checks.some((check) => !check.ok));
+  assert.deepEqual(jsonPayload({ stage: 'done', ok: true, results: [] }, 0).results, []);
 });
 
 test('records older than the max age are expired, not restorable', (t) => {

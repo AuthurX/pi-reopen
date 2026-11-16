@@ -16,6 +16,7 @@ const STATE_LABEL = {
 	live: "运行中",
 	claimed: "启动占用中",
 	expired: "已过期",
+	filtered: "未匹配 --only",
 	"wrong-platform": "其他平台/发行版",
 	"missing-cwd": "工作目录缺失",
 	"missing-file": "会话文件缺失",
@@ -34,7 +35,7 @@ export function tabTitle(entry) {
 }
 
 /** 只读：列出全部成员与状态（list / dry-run 共用）。 */
-export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs } = {}) {
+export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs, only } = {}) {
 	const members = listMembers(paths);
 	const plan = buildRestorePlan({
 		members,
@@ -46,6 +47,7 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 		distro: distro ?? env.WSL_DISTRO_NAME,
 		now,
 		maxAgeMs: maxAgeMs ?? maxAgeMsFromEnv(env),
+		only,
 	});
 	return { members, plan };
 }
@@ -82,13 +84,14 @@ export async function runRestore({
 	piProber,
 	owners,
 	titleSetter,
+	only,
 } = {}) {
 	const pre = preflight({ env, platform, prober, piProber });
 	if (!pre.ok) {
 		return { ok: false, stage: "preflight", checks: pre.checks };
 	}
 	sweepClaims(paths);
-	const { plan } = inspect({ paths, owners, env, platform: pre.platform, distro: pre.distro });
+	const { plan } = inspect({ paths, owners, env, platform: pre.platform, distro: pre.distro, only });
 	if (dryRun) {
 		return { ok: true, stage: "dry-run", plan };
 	}

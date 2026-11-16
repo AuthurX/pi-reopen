@@ -21,6 +21,20 @@ export function resolveSessionFile(entry, paths = workspacePaths()) {
 	return undefined;
 }
 
+/** --only 匹配：不带 * 时按大小写不敏感的子串，带 * 时按通配符；匹配名称/路径/会话 id。 */
+export function matchesOnly(entry, pattern) {
+	const fields = [entry.name, entry.cwd, entry.sessionId]
+		.filter(Boolean)
+		.map((value) => String(value).toLowerCase());
+	if (!pattern.includes("*")) {
+		const needle = pattern.toLowerCase();
+		return fields.some((field) => field.includes(needle));
+	}
+	const source = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+	const regex = new RegExp(`^${source}$`, "i");
+	return fields.some((field) => regex.test(field));
+}
+
 function dedupeKey(sessionFile) {
 	try {
 		return realpathSync(sessionFile);
@@ -34,6 +48,7 @@ function dedupeKey(sessionFile) {
  * live        进程仍存活，跳过（也自然排除了发起恢复的当前会话）
  * claimed     其他恢复进程正在启动它，跳过
  * expired     记录早于 maxAgeMs（默认 14 天），不再自动恢复，可用 prune 清理
+ * filtered    未匹配 --only 过滤器，本次不恢复
  * wrong-platform 记录来自其他系统/发行版（共用 agent 目录时），跳过并报告
  * missing-cwd 工作目录不存在，跳过并报告
  * missing-file 会话文件不存在（未落盘/已删除），跳过并报告
@@ -52,6 +67,7 @@ export function buildRestorePlan({
 	distro = process.env.WSL_DISTRO_NAME,
 	now = Date.now(),
 	maxAgeMs,
+	only,
 }) {
 	const seen = new Set();
 	const items = [];
@@ -86,6 +102,8 @@ export function buildRestorePlan({
 					} else if (Number.isFinite(maxAgeMs) && now - (entry.ts ?? 0) > maxAgeMs) {
 						// 过期判定放在最后：缺文件/缺目录比“太久没动”更具体、更可操作。
 						state = "expired";
+					} else if (only?.length && !only.some((pattern) => matchesOnly(entry, pattern))) {
+						state = "filtered";
 					}
 				}
 			}
