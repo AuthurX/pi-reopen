@@ -236,6 +236,9 @@ test('runRestore refuses to run while a live holder owns the restore lock', wslO
   assert.equal(spawned, 1);
   holder.kill('SIGKILL');
   await new Promise((r) => setTimeout(r, 50));
+  // 上一次恢复在同一个测试进程里留下了启动声明；真实场景中新的 Pi 会登记并清除它
+  // （或恢复进程退出后声明持有者已死），这里显式模拟登记完成后的状态。
+  releaseClaim('locked', f.paths);
   const again = await runRestore(opts);
   assert.equal(again.stage, 'done', '持有者已死时可接管过期锁');
   assert.equal(spawned, 2);
