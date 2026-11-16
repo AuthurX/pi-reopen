@@ -120,6 +120,28 @@ export async function runRestore({
 	}
 }
 
+/**
+ * 进程退出码契约（脚本化依赖它，不要随意改变含义）：
+ *   0 全部请求成功且已确认（或无待恢复项）
+ *   1 至少一个 WezTerm 请求失败 / 用法错误
+ *   2 环境预检未通过
+ *   3 请求已发出，但超时未确认 Pi 启动
+ *   4 有项目被跳过（被其他恢复进程占用、提前中止），但没有失败
+ * 优先级：失败 > 未确认 > 跳过 > 成功。
+ */
+export const EXIT = Object.freeze({ ok: 0, failed: 1, preflight: 2, unverified: 3, skipped: 4 });
+
+export function exitCodeFor(result) {
+	if (result.stage === "preflight") return EXIT.preflight;
+	if (result.stage === "locked") return EXIT.skipped;
+	if (result.stage === "dry-run") return EXIT.ok;
+	const results = result.results ?? [];
+	if (results.some((item) => item.state !== "claimed" && !item.aborted && !item.requested)) return EXIT.failed;
+	if (result.verification?.unverified?.length) return EXIT.unverified;
+	if (results.some((item) => item.state === "claimed" || item.aborted)) return EXIT.skipped;
+	return EXIT.ok;
+}
+
 /** 生成给人看的中文报告行。 */
 export function summarize(result) {
 	const lines = [];

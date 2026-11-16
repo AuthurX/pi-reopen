@@ -4,7 +4,7 @@ import { binfmtStatus, PERSIST_HINT } from "./binfmt.js";
 import { workspacePaths } from "./paths.js";
 import { currentBootId, isLive } from "./liveness.js";
 import { clearWorkspace } from "./members.js";
-import { inspect, label, runRestore, summarize } from "./restore.js";
+import { exitCodeFor, inspect, label, runRestore, summarize } from "./restore.js";
 import { preflight } from "./preflight.js";
 import { runtimePlatform } from "./platform.js";
 
@@ -107,8 +107,7 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 		case "restore": {
 			const result = await runRestore({ env, dryRun: hasFlag("--dry-run"), noWait: hasFlag("--no-wait") });
 			for (const line of summarize(result)) write(line);
-			if (!result.ok) return result.stage === "preflight" ? 2 : 1;
-			return 0;
+			return exitCodeFor(result);
 		}
 		case "list": {
 			const wide = hasFlag("--wide");

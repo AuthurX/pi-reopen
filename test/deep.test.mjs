@@ -13,7 +13,7 @@ import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { inspect, runRestore, summarize } from '../src/restore.js';
+import { EXIT, exitCodeFor, inspect, runRestore, summarize } from '../src/restore.js';
 import { run as cliRun, displayWidth } from '../src/cli.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
@@ -321,6 +321,20 @@ test('runRestore reports failure without spawning when every restorable is claim
   assert.equal(result.ok, false);
   assert.equal(result.results[0].state, 'claimed');
   assert.match(summarize(result).join('\n'), /其他恢复进程正在启动，跳过/);
+});
+
+test('exit codes separate failures, unverified starts and skipped work', () => {
+  assert.equal(exitCodeFor({ stage: 'preflight' }), EXIT.preflight);
+  assert.equal(exitCodeFor({ stage: 'locked' }), EXIT.skipped);
+  assert.equal(exitCodeFor({ stage: 'dry-run' }), EXIT.ok);
+  assert.equal(exitCodeFor({ stage: 'done', results: [] }), EXIT.ok, '没有待恢复项不算失败');
+  assert.equal(exitCodeFor({ stage: 'done', results: [{ requested: true }], verification: { verified: ['a'], unverified: [] } }), EXIT.ok);
+  assert.equal(exitCodeFor({ stage: 'done', results: [{ requested: true }], verification: { verified: [], unverified: ['a'] } }), EXIT.unverified,
+    '请求已发出但未确认必须与完全成功区分');
+  assert.equal(exitCodeFor({ stage: 'done', results: [{ requested: true }, { state: 'claimed' }], verification: { verified: ['a'], unverified: [] } }), EXIT.skipped);
+  assert.equal(exitCodeFor({ stage: 'done', results: [{ requested: false }], verification: null }), EXIT.failed);
+  assert.equal(exitCodeFor({ stage: 'done', results: [{ requested: false }, { requested: true }], verification: { verified: [], unverified: ['b'] } }), EXIT.failed,
+    '真实失败优先于未确认');
 });
 
 test('summarize handles empty restore results', () => {
