@@ -298,6 +298,7 @@ export default async function (pi: ExtensionAPI) {
 				const claim = claims.claimSession(entry.sessionId, process.pid, paths);
 				if (!claim.claimed) continue;
 				const result = await spawn.openTab({
+					terminal: pre.terminal,
 					wezterm: pre.wezterm,
 					platform: pre.platform,
 					piCommand: pre.piCommand,
@@ -312,7 +313,7 @@ export default async function (pi: ExtensionAPI) {
 					ctx.ui.notify(i18n.t(lang, "ext.spawnFailed", { cwd: entry.cwd, error: result.error }), "warning");
 					continue;
 				}
-				await restore.setTitle({ wezterm: pre.wezterm, stdout: result.stdout, entry, env: process.env });
+				await restore.setTitle({ wezterm: pre.wezterm, terminal: pre.terminal, stdout: result.stdout, entry, env: process.env });
 				// 占位记录：即使新 Pi 没能启动，下次恢复也能重试这个会话。
 				// 已经有记录（新 Pi 已登记或此前残留）时不要覆盖，否则会把 pid 抹掉、
 				// 让 waitForMembers 永远等不到确认。

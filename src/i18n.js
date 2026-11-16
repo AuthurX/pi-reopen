@@ -137,6 +137,7 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 		en: "wezterm cli did not respond within {ms}ms (WezTerm may be hung); request aborted",
 	},
 	"spawn.exitCode": { zh: "wezterm cli 退出码 {code}", en: "wezterm cli exited with code {code}" },
+	"spawn.unknownTerminal": { zh: "未知的终端适配器：{terminal}（可用：wezterm）", en: "Unknown terminal adapter: {terminal} (available: wezterm)" },
 	"spawn.unsupportedPlatform": { zh: "不支持的平台：{platform}", en: "Unsupported platform: {platform}" },
 	"windows.noPiCommand": { zh: "Windows Pi 启动命令未经预检", en: "Windows Pi command was not preflighted" },
 
@@ -165,6 +166,8 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	},
 
 	// 预检
+	"pf.terminal": { zh: "终端适配器", en: "Terminal adapter" },
+	"pf.terminalHint": { zh: "可用 PI_WORKSPACE_TERMINAL 选择适配器；当前只支持 wezterm", en: "Use PI_WORKSPACE_TERMINAL to choose an adapter; only wezterm is supported today" },
 	"pf.platform": { zh: "运行平台", en: "Platform" },
 	"pf.platformHint": { zh: "支持 Linux、macOS、Windows 和 WSL", en: "Supported: Linux, macOS, Windows and WSL" },
 	"pf.distro": { zh: "WSL 发行版", en: "WSL distro" },

@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { BINFMT_FIX_COMMAND } from "./binfmt.js";
 import { discoverWezterm } from "./discover.js";
 import { resolveLang, t } from "./i18n.js";
+import { getTerminal, terminalId } from "./terminals/index.js";
 import { launchSetup, shellQuote } from "./launch.js";
 import { currentBootId, processStart } from "./liveness.js";
 import { powershellPath, runtimePlatform } from "./platform.js";
@@ -22,6 +23,9 @@ export function preflight({ env = process.env, platform = runtimePlatform(env), 
 	const add = (name, ok, detail, hint) => checks.push({ name, ok, detail, hint: ok ? undefined : hint });
 
 	add(t(lang, "pf.platform"), ["wsl", "linux", "darwin", "win32"].includes(platform), platform, t(lang, "pf.platformHint"));
+	const terminal = terminalId(env);
+	const adapter = getTerminal(terminal);
+	add(t(lang, "pf.terminal"), !!adapter, terminal, t(lang, "pf.terminalHint"));
 	const distro = platform === "wsl" ? env.WSL_DISTRO_NAME : undefined;
 	if (platform === "wsl") {
 		add(t(lang, "pf.distro"), !!distro, distro || t(lang, "pf.distroUnset"), distro ? undefined : t(lang, "pf.distroHint"));
@@ -45,7 +49,7 @@ export function preflight({ env = process.env, platform = runtimePlatform(env), 
 			);
 		}
 	} else {
-		found = discoverWezterm(env, { platform });
+		found = adapter?.discover(env, { platform });
 		add(
 			t(lang, "pf.wezterm"),
 			!!found,
@@ -87,7 +91,7 @@ export function preflight({ env = process.env, platform = runtimePlatform(env), 
 		add(t(lang, "pf.pi"), piOk, pi?.piBin || t(lang, "pf.weztermMissing"), t(lang, "pf.piHint"));
 		const powershell = powershellPath(env);
 		add(t(lang, "pf.powershell"), isFile(powershell), powershell, t(lang, "pf.powershellHint"));
-		return { ok: checks.every((c) => c.ok), platform, wezterm: found, checks, piBin: pi?.piBin, piCommand: pi?.piCommand, powershell };
+		return { ok: checks.every((c) => c.ok), platform, terminal, wezterm: found, checks, piBin: pi?.piBin, piCommand: pi?.piCommand, powershell };
 	}
 
 	const explicitPi = env.PI_WORKSPACE_PI_BIN;
@@ -110,5 +114,5 @@ export function preflight({ env = process.env, platform = runtimePlatform(env), 
 		piOk ? undefined : t(lang, "pf.piHint"),
 	);
 
-	return { ok: checks.every((c) => c.ok), platform, wezterm: found, checks, distro, lang, piBin: piOk ? piPath : undefined };
+	return { ok: checks.every((c) => c.ok), platform, terminal, wezterm: found, checks, distro, lang, piBin: piOk ? piPath : undefined };
 }

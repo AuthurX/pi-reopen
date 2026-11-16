@@ -480,6 +480,26 @@ test('records with a newer schema are skipped and reported by list', async (t) =
   assert.match(out.join('\n'), /结构版本比当前 CLI 新/);
 });
 
+test('terminal adapters are resolved by name and unknown ones fail closed', async (t) => {
+  const { getTerminal, listTerminals, terminalId } = await import('../src/terminals/index.js');
+  assert.deepEqual(listTerminals(), ['wezterm']);
+  assert.equal(getTerminal('wezterm')?.id, 'wezterm');
+  assert.equal(getTerminal('tmux'), undefined);
+  assert.equal(terminalId({ PI_WORKSPACE_TERMINAL: 'tmux' }), 'tmux');
+  assert.equal(terminalId({}), 'wezterm');
+
+  const f = fixture(t);
+  const pre = preflight({
+    env: { ...f.env, PI_WORKSPACE_TERMINAL: 'tmux' },
+    platform: 'linux',
+    piProber: () => ({ status: 0, stdout: '/usr/bin/pi' }),
+  });
+  assert.equal(pre.ok, false, '未知适配器必须拒绝恢复');
+  const failed = pre.checks.find((c) => c.name === '终端适配器');
+  assert.equal(failed.ok, false);
+  assert.match(failed.hint, /wezterm/);
+});
+
 test('peer dependencies stay inside a bounded major range', () => {
   const pkg = JSON.parse(fs.readFileSync(join(project, 'package.json'), 'utf8'));
   for (const [name, range] of Object.entries(pkg.peerDependencies)) {

@@ -43,12 +43,12 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 }
 
 /** 开完标签页后设置标题；失败只影响外观，不影响恢复结果。 */
-export async function setTitle({ wezterm, stdout, entry, env = process.env, titleSetter = setTabTitle } = {}) {
+export async function setTitle({ wezterm, terminal, stdout, entry, env = process.env, titleSetter = setTabTitle } = {}) {
 	const paneId = parsePaneId(stdout);
 	const title = tabTitle(entry);
 	if (!paneId || !title) return false;
 	try {
-		return await titleSetter({ wezterm, paneId, title, env });
+		return await titleSetter({ wezterm, terminal, paneId, title, env });
 	} catch {
 		return false;
 	}
@@ -132,6 +132,7 @@ export async function runRestore({
 				continue;
 			}
 			const spawnResult = await openTab({
+				terminal: pre.terminal,
 				wezterm: pre.wezterm,
 				platform: pre.platform,
 				piCommand: pre.piCommand,
@@ -147,7 +148,7 @@ export async function runRestore({
 			if (spawnResult.ok) {
 				consecutiveFailures = 0;
 				results.push({ ...item, requested: true });
-				await setTitle({ wezterm: pre.wezterm, stdout: spawnResult.stdout, entry: item.entry, env, titleSetter });
+				await setTitle({ wezterm: pre.wezterm, terminal: pre.terminal, stdout: spawnResult.stdout, entry: item.entry, env, titleSetter });
 			} else {
 				consecutiveFailures++;
 				results.push({ ...item, requested: false, requestError: spawnResult.error });
