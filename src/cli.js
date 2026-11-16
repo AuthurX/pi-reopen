@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
-import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import { binfmtStatus, persistHint } from "./binfmt.js";
-import { envCompat } from "./env.js";
 import { healthChecks, registryHealth } from "./health.js";
 import { resolveLang, t } from "./i18n.js";
 import { workspacePaths } from "./paths.js";
@@ -144,19 +142,7 @@ function listLines({ plan }, { termWidth = 80, lang = resolveLang() } = {}) {
 	return [render([t(lang, "cli.listState"), t(lang, "cli.listSession"), t(lang, "cli.listPath"), t(lang, "cli.listTime")]), ...rows.map(render)];
 }
 
-/** 交互确认；非 TTY（管道、CI）不阻塞，保持可脚本化。 */
-export async function promptYesNo(question, { input = process.stdin, output = process.stdout } = {}) {
-	if (!input?.isTTY) return true;
-	const rl = createInterface({ input, output });
-	try {
-		const answer = (await rl.question(question)).trim().toLowerCase();
-		return answer === "y" || answer === "yes" || answer === "是";
-	} finally {
-		rl.close();
-	}
-}
-
-export async function run(argv = [], { stdout = process.stdout, env = process.env, stdin = process.stdin, confirm: confirmOverride } = {}) {
+export async function run(argv = [], { stdout = process.stdout, env = process.env } = {}) {
 	const { command, flags } = normalizeArgv(argv);
 	const lang = resolveLang(env);
 	const hasFlag = (name) => flags.includes(name);
@@ -185,27 +171,12 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 		case "restore": {
 			const limitRaw = Number(flagValue(flags, "--limit"));
 			const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : undefined;
-			const delayRaw = Number(flagValue(flags, "--delay"));
-			const delayMs = Number.isFinite(delayRaw) && delayRaw > 0 ? delayRaw : 0;
-			const thresholdRaw = Number(envCompat(env, "PI_REOPEN_CONFIRM_THRESHOLD"));
-			const yes = hasFlag("--yes") || hasFlag("-y");
-			const confirm = yes || hasFlag("--dry-run") || hasFlag("--json")
-				? undefined
-				: confirmOverride ?? (async ({ targets }) => {
-					const list = targets
-						.map((item) => `  ${item.entry.name || item.entry.sessionId}  ${item.entry.cwd}`)
-						.join("\n");
-					return promptYesNo(`${t(lang, "cli.confirmBulk", { n: targets.length })}\n${list}\n[y/N] `, { input: stdin, output: stdout });
-				});
 			const result = await runRestore({
 				env,
 				dryRun: hasFlag("--dry-run"),
 				noWait: hasFlag("--no-wait"),
 				only: collectOnly(flags),
 				limit,
-				delayMs,
-				confirm,
-				confirmThreshold: Number.isFinite(thresholdRaw) && thresholdRaw >= 0 ? thresholdRaw : undefined,
 			});
 			const code = exitCodeFor(result);
 			if (hasFlag("--json")) {

@@ -38,7 +38,6 @@ const MESSAGES = {
 	"restore.hint": { zh: "    → {hint}", en: "    → {hint}" },
 	"restore.lockedHeader": { zh: "✖ 另一个恢复进程正在进行，本次未打开任何标签页：", en: "✖ Another restore is running; no tabs were opened:" },
 	"restore.lockedHolder": { zh: "  → 持有者 pid {pid}，开始于 {ts}", en: "  → holder pid {pid}, started {ts}" },
-	"restore.cancelled": { zh: "已取消，未打开任何标签页。", en: "Cancelled; no tabs were opened." },
 	"restore.dryRunHeader": { zh: "[dry-run] 待恢复 {n} 个{skipped}", en: "[dry-run] {n} to restore{skipped}" },
 	"restore.dryRunItem": { zh: "  → {title} | {cwd}", en: "  → {title} | {cwd}" },
 	"restore.claimedItem": { zh: "  ⏭ {title}：其他恢复进程正在启动，跳过", en: "  ⏭ {title}: another restore is starting it, skipped" },
@@ -75,10 +74,8 @@ restore 选项：
   --json               输出机器可读的 JSON（便于脚本消费）
   --only <模式>        只恢复匹配的会话；子串或 * 通配符，可重复/逗号分隔
   --limit <N>          本次最多开 N 个标签页（其余保留待下次）
-  --delay <ms>         每个标签页之间等待的毫秒数（缓解批量启动压力）
-  --yes                跳过批量确认提示（超过 5 个时默认会询问）
 
-每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
+标签页并发打开（默认同时 5 个）；每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
 默认在全部请求发出后等待各 pi 启动并登记再报告，--no-wait 跳过该等待。
 
 退出码：0 成功；1 请求失败/用法错误；2 预检失败；3 请求已发但未确认；4 仅有跳过项。`,
@@ -101,15 +98,12 @@ restore options:
   --json               machine-readable JSON output
   --only <pattern>     restore only matching sessions; substring or * glob, repeatable/comma-separated
   --limit <N>          open at most N tabs this run; the rest stay for next time
-  --delay <ms>         wait between tab requests to soften large bursts
-  --yes                skip the bulk confirmation prompt (asked above 5 sessions)
 
-Each 'wezterm cli spawn' request is aborted after 15s; 3 consecutive failures stop early.
+Tabs open concurrently (5 at a time by default); each 'wezterm cli spawn' request is aborted after 15s; 3 consecutive failures stop early.
 By default it waits for every pi to start and register before reporting; --no-wait skips that.
 
 Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested but unconfirmed; 4 skipped only.`,
 	},
-	"cli.confirmBulk": { zh: "将打开 {n} 个标签页：", en: "About to open {n} tab(s):" },
 	"cli.forgetUsage": { zh: "用法：pi-reopen forget <会话 id 或唯一前缀> [...]", en: "Usage: pi-reopen forget <session id or unique prefix> [...]" },
 	"cli.forgetAmbiguous": { zh: "✖ 前缀「{input}」有歧义，匹配：{candidates}", en: "✖ Prefix \"{input}\" is ambiguous, matches: {candidates}" },
 	"cli.forgetRemoved": { zh: "已移除 {n} 条登记{missing}", en: "Removed {n} record(s){missing}" },
@@ -233,7 +227,6 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"ext.clear": { zh: "已清空 {n} 条登记；对话文件未删除", en: "Cleared {n} record(s); conversation files untouched" },
 	"ext.reopenUsage": { zh: "用法：/reopen | /reopen recent | /reopen clear", en: "Usage: /reopen | /reopen recent | /reopen clear" },
 	"ext.aliasNotice": { zh: "/all 已改名为 /reopen", en: "/all was renamed to /reopen" },
-	"ext.confirmBulkTitle": { zh: "将打开 {n} 个标签页", en: "About to open {n} tab(s)" },
 };
 
 export function t(lang, key, params = {}) {

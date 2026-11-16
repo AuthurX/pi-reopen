@@ -1,6 +1,6 @@
 # 本机实现审查
 
-**当前结论：1.0.0 稳定版准备完成（2026-11-16）。** `npm test` 109/109 通过（集成测试默认跳过），`npm run verify-pack` 通过，真实 Pi PTY 3/3 通过。真实 WezTerm 单会话恢复验收在 0.2.0 完成；1.0.0 新增的关闭判定、标题、批量保护路径仍需按 PLATFORMS.md 的清单实机验收。下方按时间倒序记录各轮次；旧轮次结论不代表当前状态。
+**当前结论：1.0.0 稳定版准备完成（2026-11-16）。** `npm test` 114 用例 0 失败（3 个 Windows 专属用例在 Linux 跳过；集成测试默认跳过），`npm run verify-pack` 通过，真实 Pi PTY 3/3 通过。真实 WezTerm 单会话恢复验收在 0.2.0 完成；1.0.0 新增的关闭判定、标题、批量保护路径仍需按 PLATFORMS.md 的清单实机验收。下方按时间倒序记录各轮次；旧轮次结论不代表当前状态。
 
 ## 1.0.0 稳定版准备（2026-11-16）
 
@@ -15,8 +15,8 @@
 - **list**：`claimFn` 改用 `activeClaim`，可显示“启动占用中”；`--json` 输出。
 - **/reopen recent**：读取会话头+尾部得到 `session_info` 名称；校验 cwd、扫描占用、共用全局锁、`requirePid` 确认、未确认释放声明。
 - **记录生命周期**：新增 `forget`/`prune`，超过 14 天的记录为 `expired`；prune 不清理存活/占用/其他平台记录。
-- **CLI 约定**：`--help`/`--version` 返回 0，裸 flag 归一化为 restore；`--only`/`--limit`/`--delay`/`--yes`/`--json`。
-- **批量安全**：超过 5 个先确认；确认窗口 15s + 2s/会话（上限 90s）。
+- **CLI 约定**：`--help`/`--version` 返回 0，裸 flag 归一化为 restore；`--only`/`--limit`/`--json`。
+- **批量安全**：标签页并发打开（默认同时 5 个）；确认窗口 15s + 2s/会话（上限 90s）。
 - **i18n**：`src/i18n.js` 中英词表，CLI/doctor/扩展提示全部本地化，默认跟随 locale。
 - **doctor**：新增登记目录、扩展自述、版本一致性、记录结构检查；空登记给出 `/reload` 提示。
 - **扩展健壮性**：缓存进程身份、写失败单次提示、`session_info_changed` 刷新名称、宿主 API 读取包 try/catch。

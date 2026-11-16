@@ -8,6 +8,7 @@ import { runtimePlatform, powershellArgs, powershellPath } from '../src/platform
 import { discoverWezterm } from '../src/discover.js';
 import { discoverWindowsPi, buildWindowsScript, powershellQuote } from '../src/windows.js';
 import { currentBootId, processStart, isLive } from '../src/liveness.js';
+import * as i18n from '../src/i18n.js';
 import { preflight } from '../src/preflight.js';
 import { openTab } from '../src/spawn.js';
 import { runRestore } from '../src/restore.js';
@@ -132,7 +133,7 @@ test('native preflight checks mux connectivity and fails closed when liveness is
   assert.equal(pre.checks.some(c => c.name.startsWith('WSL')), false);
   const offline = preflight({ ...opts, prober: (_program, args) => ({ status: args[0] === 'cli' ? 1 : 0 }) });
   assert.equal(offline.ok, false);
-  assert.equal(offline.checks.find(c => c.name === 'WezTerm 运行实例').ok, false);
+  assert.equal(offline.checks.find(c => c.name === i18n.t(i18n.resolveLang(opts.env), 'pf.weztermInstance')).ok, false);
   assert.equal(preflight({ ...opts, identityProber: () => ({}) }).ok, false);
 });
 

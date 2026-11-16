@@ -57,8 +57,8 @@ export async function setTitle({ wezterm, terminal, stdout, entry, env = process
 /** 连续请求失败达此值时提前停止（WezTerm 多半已卡死，继续只会堆积更多超时等待）。 */
 const MAX_CONSECUTIVE_FAILURES = 3;
 
-/** 批量恢复默认超过这个数量就先确认，避免无提示地开出一屏标签页。 */
-export const CONFIRM_THRESHOLD = 5;
+/** 并发打开的标签页数上限（有界并发，避免压垮 WezTerm）。 */
+export const SPAWN_CONCURRENCY = 5;
 
 /**
  * 默认确认等待窗口：按批大小放大。
@@ -81,10 +81,7 @@ export async function runRestore({
 	waitTimeoutMs,
 	spawnTimeoutMs,
 	limit,
-	delayMs = 0,
-	confirm,
-	confirmThreshold = CONFIRM_THRESHOLD,
-	sleeper = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+	concurrency = SPAWN_CONCURRENCY,
 	spawner,
 	prober,
 	piProber,
@@ -106,9 +103,6 @@ export async function runRestore({
 	const deferred = restorable.slice(targets.length);
 	// 超出 --limit 的条目在计划里也改成 deferred，避免汇总里仍显示“待恢复”。
 	for (const item of deferred) item.state = "deferred";
-	if (confirm && targets.length > confirmThreshold && !(await confirm({ plan, targets }))) {
-		return { ok: false, stage: "cancelled", plan };
-	}
 	const lock = acquireRestoreLock(paths, process.pid);
 	if (lock.locked) {
 		return { ok: false, stage: "locked", holder: lock.holder, plan };
@@ -120,16 +114,13 @@ export async function runRestore({
 		const results = plan.items.filter((item) => item.state === "claimed" || item.state === "deferred");
 		let consecutiveFailures = 0;
 		let aborted = false;
-		for (const [index, item] of targets.entries()) {
-			if (index > 0 && delayMs > 0) await sleeper(delayMs);
-			if (aborted) {
-				results.push({ ...item, requested: false, aborted: true });
-				continue;
-			}
+		const outcomes = new Array(targets.length);
+		const processItem = async (index) => {
+			const item = targets[index];
 			const claim = claimSession(item.entry.sessionId, process.pid, paths);
 			if (!claim.claimed) {
-				results.push({ ...item, state: "claimed" });
-				continue;
+				outcomes[index] = { ...item, state: "claimed" };
+				return;
 			}
 			const spawnResult = await openTab({
 				terminal: pre.terminal,
@@ -147,14 +138,24 @@ export async function runRestore({
 			});
 			if (spawnResult.ok) {
 				consecutiveFailures = 0;
-				results.push({ ...item, requested: true });
+				outcomes[index] = { ...item, requested: true };
 				await setTitle({ wezterm: pre.wezterm, terminal: pre.terminal, stdout: spawnResult.stdout, entry: item.entry, env, titleSetter });
 			} else {
 				consecutiveFailures++;
-				results.push({ ...item, requested: false, requestError: spawnResult.error });
+				outcomes[index] = { ...item, requested: false, requestError: spawnResult.error };
+				if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) aborted = true;
 			}
-			if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) aborted = true;
+		};
+		// 有界并发：每轮最多同时开 concurrency 个标签页，结果按原顺序汇总；
+		// 连续失败熔断只在轮与轮之间判定，避免在飞请求未报结果时误放行后续条目。
+		const step = Number.isFinite(concurrency) && concurrency >= 1 ? Math.floor(concurrency) : SPAWN_CONCURRENCY;
+		for (let start = 0; start < targets.length && !aborted; start += step) {
+			await Promise.all(targets.slice(start, start + step).map((_, k) => processItem(start + k)));
 		}
+		for (let index = 0; index < targets.length; index++) {
+			if (outcomes[index] === undefined) outcomes[index] = { ...targets[index], requested: false, aborted: true };
+		}
+		results.push(...outcomes);
 		const requestedIds = results.filter((r) => r.requested).map((r) => r.entry.sessionId);
 		const verification = noWait || requestedIds.length === 0
 			? null
@@ -185,7 +186,6 @@ export function exitCodeFor(result) {
 	if (result.stage === "preflight") return EXIT.preflight;
 	if (result.stage === "locked") return EXIT.skipped;
 	if (result.stage === "dry-run") return EXIT.ok;
-	if (result.stage === "cancelled") return EXIT.ok; // 用户主动取消不算失败
 	const results = result.results ?? [];
 	const skippedStates = new Set(["claimed", "deferred"]);
 	if (results.some((item) => !skippedStates.has(item.state) && !item.aborted && !item.requested)) return EXIT.failed;
@@ -203,10 +203,6 @@ export function summarize(result, lang = resolveLang()) {
 			lines.push(t(lang, "restore.check", { name: check.name, detail: check.detail }));
 			if (check.hint) lines.push(t(lang, "restore.hint", { hint: check.hint }));
 		}
-		return lines;
-	}
-	if (result.stage === "cancelled") {
-		lines.push(t(lang, "restore.cancelled"));
 		return lines;
 	}
 	if (result.stage === "locked") {

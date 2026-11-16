@@ -42,7 +42,7 @@ pi-reopen
 
 Pi 内等价入口：
 
-- `/reopen` — 恢复已登记的 Pi（超过 5 个会先确认）
+- `/reopen` — 恢复已登记的 Pi
 - `/reopen recent` — 从近 24 小时的对话历史补选（适用于未登记的窗口）
 - `/reopen clear` — 清空登记（不删除对话文件）
 - `Ctrl+Shift+O` — 一键恢复
@@ -58,8 +58,6 @@ Pi 内等价入口：
 | `pi-reopen restore --no-wait` | 发出请求后立即返回，不等待 pi 登记确认 |
 | `pi-reopen restore --only <模式>` | 只恢复匹配的会话（子串或 `*` 通配符；匹配名称、路径、id） |
 | `pi-reopen restore --limit <N>` | 本次最多开 N 个标签页，其余留待下次 |
-| `pi-reopen restore --delay <ms>` | 标签页之间等待，缓解批量启动压力 |
-| `pi-reopen restore --yes` | 跳过批量确认（超过 5 个时默认询问） |
 | `pi-reopen restore --json` | 输出机器可读的 JSON |
 | `pi-reopen list [--wide\|--json]` | 列出登记成员与状态；长内容默认按终端宽度截断 |
 | `pi-reopen forget <id\|前缀> ...` | 删除指定登记（不删除对话文件） |
@@ -70,7 +68,7 @@ Pi 内等价入口：
 
 `list` 状态：运行中 / 启动占用中 / 待恢复 / 已过期 / 已在其他窗口打开 / 工作目录缺失 / 会话文件缺失 / 未匹配 `--only` / 本次未处理（超出 `--limit`）/ 其他平台或发行版 / 重复条目。
 
-退出码：0 成功；1 恢复请求失败或未知命令；2 环境预检失败；3 请求已发出但未确认；4 仅有跳过项（被占用/超出 limit）。用户主动取消确认返回 0。
+退出码：0 成功；1 恢复请求失败或未知命令；2 环境预检失败；3 请求已发出但未确认；4 仅有跳过项（被占用/超出 limit）。
 
 ## 安装
 
@@ -133,7 +131,6 @@ pi install git:github.com/AuthurX/pi-workspace
 | `PI_REOPEN_LANG` | 强制输出语言：`zh` 或 `en`（默认跟随 `LC_ALL`/`LANG`） |
 | `PI_REOPEN_TERMINAL` | 终端适配器 id；目前只实现 `wezterm`（见 [docs/TERMINALS.md](docs/TERMINALS.md)） |
 | `PI_REOPEN_MAX_AGE_DAYS` | 超过多少天的死记录不再自动恢复（默认 14，`0` 表示不限制） |
-| `PI_REOPEN_CONFIRM_THRESHOLD` | 打开超过 N 个标签页前先确认（默认 5） |
 
 旧变量名（`PI_WORKSPACE_*`）仍然生效；两者同时设置时以 `PI_REOPEN_*` 为准。
 
@@ -153,7 +150,7 @@ Linux/macOS/WSL 会从 PATH 和 Bash 登录环境定位 Pi。Windows 原生从 P
 
 - **登记**：每次 Pi 启动时把 `{会话文件绝对路径, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` 实时写入 `~/.pi/agent/pi-reopen/members/`（每会话一个文件，原子替换）。0.3.0 及更早版本写在 `pi-workspace/` 下的记录仍可读取与清理。
 - **关闭判定**：Pi 的信号退出也会发出 `quit` 清理事件，事件名本身不可靠。扩展在 TUI 生命周期内记录 SIGHUP/SIGTERM；无信号的主动 `/quit` 或切换会话删除记录；reload 保留记录并清理监听器。没有受跟踪信号时，再向 WezTerm 查询当前 pane（`WEZTERM_PANE`）是否还存在：pane 已消失说明窗口被关闭，记录保留。硬杀导致无清理时，残留记录会被恢复。断电时最多恢复已落盘的记录，最新未落盘的改动不保证。
-- **安全启动**：每个 `wezterm cli spawn` 请求超过 15s 无响应会终止并报错，连续 3 次失败提前停止。超过 5 个待恢复会话时 CLI 先确认（`--yes` 跳过）；`--limit`/`--delay` 限制批量规模。
+- **安全启动**：标签页并发打开（默认同时 5 个）；每个 `wezterm cli spawn` 请求超过 15s 无响应会终止并报错，连续 3 次失败提前停止。`--limit` 限制批量规模。
 - **去重**：恢复前检查进程存活（pid + 启动时刻 + bootId，重启后的旧 PID 不会误判），并扫描运行中进程的 `--session <文件>`，避免对未登记的窗口重复开标签页；启动声明（60s TTL + 持有者存活检查）进一步减少重复请求。全局恢复锁（`restore.lock`，30 分钟 TTL + pid 存活 + bootId 校验）用 `O_EXCL` 原子创建，并发恢复不会同时开整批；持锁进程死亡或系统重启后可接管。
 - **确认**：“请求被接受”与“pi 已登记”分开报告；确认窗口随批量大小放大（15s + 每个会话 2s，上限 90s）。
 - **标题与清理**：标签页标题优先会话名，否则用工作目录的文件夹名。超过 14 天的记录标记为 `expired` 不再自动恢复；`forget`/`prune` 可清理且不触碰对话文件。

@@ -42,7 +42,7 @@ Output follows the locale: Chinese for `zh_*`, English otherwise. Force it with 
 
 Equivalent entry points inside Pi:
 
-- `/reopen` — restore registered Pis (asks first above 5 sessions)
+- `/reopen` — restore registered Pis
 - `/reopen recent` — pick up from conversation history of the last 24 hours (for unregistered windows)
 - `/reopen clear` — clear the registry (does not delete conversation files)
 - `Ctrl+Shift+O` — one-click restore
@@ -58,8 +58,6 @@ Equivalent entry points inside Pi:
 | `pi-reopen restore --no-wait` | Skip waiting for each pi's start confirmation |
 | `pi-reopen restore --only <pattern>` | Restore only matching sessions (substring or `*` glob; name, path or id) |
 | `pi-reopen restore --limit <N>` | Open at most N tabs this run; the rest are deferred to next time |
-| `pi-reopen restore --delay <ms>` | Wait between tab requests to soften large bursts |
-| `pi-reopen restore --yes` | Skip the bulk confirmation prompt (asked above 5 sessions) |
 | `pi-reopen restore --json` | Machine-readable output |
 | `pi-reopen list [--wide\|--json]` | List registered members and status; long content is truncated to terminal width by default |
 | `pi-reopen forget <id\|prefix> ...` | Drop specific records (conversation files untouched) |
@@ -70,7 +68,7 @@ Equivalent entry points inside Pi:
 
 `list` statuses: running (运行中) / start claimed (启动占用中) / pending restore (待恢复) / expired (已过期) / open in another window (已在其他窗口打开) / working directory missing (工作目录缺失) / session file missing (会话文件缺失) / not matched by `--only` / deferred by `--limit` / other platform or distro (其他平台/发行版) / duplicate entry (重复条目).
 
-Exit codes: 0 success; 1 restore request failed or unknown command; 2 environment preflight failed; 3 requests sent but not confirmed; 4 skipped only (claimed/deferred). A user-cancelled confirmation exits 0.
+Exit codes: 0 success; 1 restore request failed or unknown command; 2 environment preflight failed; 3 requests sent but not confirmed; 4 skipped only (claimed/deferred).
 
 ## Installation
 
@@ -133,7 +131,6 @@ pi install git:github.com/AuthurX/pi-workspace
 | `PI_REOPEN_LANG` | Force output language: `zh` or `en` (defaults from `LC_ALL`/`LANG`) |
 | `PI_REOPEN_TERMINAL` | Terminal adapter id; only `wezterm` is implemented (see [docs/TERMINALS.md](docs/TERMINALS.md)) |
 | `PI_REOPEN_MAX_AGE_DAYS` | Days after which dead records stop being restored (default 14, `0` disables) |
-| `PI_REOPEN_CONFIRM_THRESHOLD` | Ask before opening more than N tabs (default 5) |
 
 Legacy names (`PI_WORKSPACE_*`) are still honored; the canonical `PI_REOPEN_*` name wins when both are set.
 
@@ -153,7 +150,7 @@ On Linux/macOS/WSL, Pi is located from PATH and the Bash login environment. Nati
 
 - **Registration**: on every Pi startup, `{session file absolute path, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` is written in real time to `~/.pi/agent/pi-reopen/members/` (one file per session, atomic replacement). Records written by 0.3.0 and earlier under `pi-workspace/` are still read and cleaned.
 - **Close detection**: Pi's signal exits also emit a `quit` cleanup event, so the event name alone is not reliable. The extension records SIGHUP/SIGTERM within the TUI lifecycle; a signal-less deliberate `/quit` or session switch deletes the record; reload keeps the record and cleans up listeners. Without a tracked signal it also asks WezTerm whether the current pane still exists (`WEZTERM_PANE`): a vanished pane means the window was closed, so the record is kept. When a hard kill prevents cleanup, the leftover is recorded. On power loss, at most the persisted records are recovered; the latest unflushed changes are not guaranteed.
-- **Safe startup**: each `wezterm cli spawn` request is aborted with an error after 15s of no response, and 3 consecutive request failures stop early, avoiding long waits when WezTerm is stuck. Above 5 restorable sessions the CLI asks for confirmation (`--yes` to skip); `--limit`/`--delay` bound the burst.
+- **Safe startup**: tabs open concurrently (5 at a time by default); each `wezterm cli spawn` request is aborted with an error after 15s of no response, and 3 consecutive request failures stop early, avoiding long waits when WezTerm is stuck. `--limit` bounds the burst.
 - **Deduplication**: before restore, process liveness is checked (pid + start time + bootId; stale PIDs after a reboot are not misjudged), running processes are scanned for `--session <file>` so an unregistered window is not opened twice, and start claims (60s TTL + holder liveness check) reduce duplicate requests. The global restore lock (`restore.lock`, 30-minute TTL + pid liveness + bootId check) is created with `O_EXCL`, so concurrent restores cannot both start a batch; it can be taken over after the lock holder dies or the OS reboots.
 - **Verification**: "request accepted" and "pi registered" are reported separately; the confirmation window scales with the batch size (15s + 2s per session, capped at 90s).
 - **Titles and hygiene**: tabs are titled with the session name, else the cwd folder name. Records older than 14 days are `expired` and no longer auto-restored; `forget`/`prune` clean up without touching conversation files.

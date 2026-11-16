@@ -236,12 +236,7 @@ export default async function (pi: ExtensionAPI) {
 
 	async function restoreAndReport(ctx: any, dryRun = false): Promise<void> {
 		const hooks = await loadHooks();
-		// 与 CLI 一致：超过阈值先让用户确认，避免一键开出一屏标签页。
-		const confirm = async ({ targets }: any) => ctx.ui.confirm(
-			i18n.t(lang, "ext.confirmBulkTitle", { n: targets.length }),
-			targets.map((item: any) => `${item.entry.name || item.entry.sessionId}  ${item.entry.cwd}`).join("\n"),
-		);
-		const result = await restore.runRestore({ dryRun, confirm, ...hooks });
+		const result = await restore.runRestore({ dryRun, ...hooks });
 		for (const line of restore.summarize(result, lang)) ctx.ui.notify(line, result.ok ? "info" : "warning");
 	}
 

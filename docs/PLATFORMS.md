@@ -43,7 +43,7 @@ node .\bin\pi-reopen.js doctor
 - 恢复前扫描运行中进程的 `--session <文件>`；即使扩展未加载或记录被清空，也不会对同一会话文件开第二个 Pi。
 - 记录带 `platform/distro/user/schemaVersion`；其他平台/发行版的记录会被跳过，比 CLI 更新的记录结构不参与恢复。
 - 扩展不限制 Pi 主版本（peer 只有下限 `>=1.5.0`，新版 Pi 直接可装）：登记前检测 `ctx.sessionManager.getSessionFile/getSessionId`，API 变更时提示一次并停止登记（不会静默失效）。
-- 批量恢复超过 5 个先确认；确认窗口 15s + 2s/会话（上限 90s），`--limit`/`--delay` 可进一步限流。
+- 标签页并发打开（默认同时 5 个）；确认窗口 15s + 2s/会话（上限 90s），`--limit` 可进一步限流。
 
 ## 验证
 

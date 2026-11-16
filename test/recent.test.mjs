@@ -57,6 +57,7 @@ async function loadRecent(t) {
   process.env.WSL_DISTRO_NAME = 'Arch';
   process.env.PI_WORKSPACE_TEST_CALLS = calls;
   process.env.PI_WORKSPACE_HOOKS = join(project, 'test', 'fixtures', 'recent-hooks.mjs');
+  process.env.PI_WORKSPACE_LANG = 'zh';
   process.env.PI_WORKSPACE_RECENT_NOWAIT = '1';
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');
 
