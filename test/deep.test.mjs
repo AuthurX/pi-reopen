@@ -10,9 +10,10 @@ import { isLive, processStart } from '../src/liveness.js';
 import { listMembers, writeMember } from '../src/members.js';
 import { CLAIM_TTL_MS, claimSession, readClaim, sweepClaims } from '../src/claims.js';
 import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
+import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { runRestore, summarize } from '../src/restore.js';
+import { inspect, runRestore, summarize } from '../src/restore.js';
 import { run as cliRun, displayWidth } from '../src/cli.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
@@ -126,6 +127,43 @@ test('plan marks sessions claimed by another restore as claimed', async (t) => {
   assert.equal(plan.items[0].state, 'claimed');
   assert.equal(plan.count('claimed'), 1);
   assert.equal(plan.restorable.length, 0);
+});
+
+test('plan skips a session file already opened by another Pi process (no double writer)', async (t) => {
+  const f = fixture(t);
+  const entry = { ...liveEntry(f.paths, 'busy'), ...(await deadIdentity()) };
+  writeMember(entry, f.paths);
+  const procDir = join(f.home, 'proc');
+  fs.mkdirSync(join(procDir, '4242'), { recursive: true });
+  fs.writeFileSync(join(procDir, '4242', 'cmdline'),
+    ['/usr/bin/node', '/opt/pi', '--session', entry.sessionFile, ''].join('\0'));
+  // 自己的恢复进程也必须被排除，否则每次恢复都会把自己当成占用者
+  fs.mkdirSync(join(procDir, String(process.pid)), { recursive: true });
+  fs.writeFileSync(join(procDir, String(process.pid), 'cmdline'),
+    ['node', 'pi-reopen', '--session', entry.sessionFile, ''].join('\0'));
+  const owners = scanSessionOwners({ platform: 'linux', procDir, selfPid: process.pid });
+  assert.equal(owners.get(normalizeSessionPath(entry.sessionFile)), 4242);
+  const { plan } = inspect({ paths: f.paths, owners });
+  assert.equal(plan.items[0].state, 'in-use');
+  assert.equal(plan.count('restorable'), 0);
+});
+
+test('session owner scan also understands --session=<path> and Windows command lines', (t) => {
+  const f = fixture(t);
+  const file = join(f.home, 'session.jsonl');
+  fs.writeFileSync(file, '{}\n');
+  const procDir = join(f.home, 'proc2');
+  fs.mkdirSync(join(procDir, '777'), { recursive: true });
+  fs.writeFileSync(join(procDir, '777', 'cmdline'), ['node', `--session=${file}`, ''].join('\0'));
+  assert.equal(scanSessionOwners({ platform: 'linux', procDir, selfPid: 1 }).get(normalizeSessionPath(file)), 777);
+  const win = scanSessionOwners({
+    platform: 'win32', selfPid: 1,
+    execFile: () => JSON.stringify([
+      { ProcessId: 9, CommandLine: `"C:\\node.exe" "C:\\pi" --session "${file}"` },
+      { ProcessId: 10, CommandLine: 'not a pi process' },
+    ]),
+  });
+  assert.equal(win.get(normalizeSessionPath(file)), 9);
 });
 
 test('resolveSessionFile prefers an existing recorded path, falls back to scan', (t) => {

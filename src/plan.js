@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { normalizeSessionPath } from "./inuse.js";
 import { isLive } from "./liveness.js";
 import { workspacePaths } from "./paths.js";
 
@@ -33,6 +34,7 @@ function dedupeKey(sessionFile) {
  * claimed     其他恢复进程正在启动它，跳过
  * missing-cwd 工作目录不存在，跳过并报告
  * missing-file 会话文件不存在（未落盘/已删除），跳过并报告
+ * in-use      会话文件已被另一个 Pi 进程打开（即使没有登记），跳过以避免双写
  * duplicate   与更早条目指向同一会话文件（含别名），跳过
  * restorable  待恢复
  */
@@ -42,6 +44,7 @@ export function buildRestorePlan({
 	liveFn = isLive,
 	claimFn,
 	bootId,
+	owners,
 }) {
 	const seen = new Set();
 	const items = [];
@@ -66,6 +69,7 @@ export function buildRestorePlan({
 					state = "duplicate";
 				} else {
 					seen.add(key);
+					if (owners?.has(normalizeSessionPath(sessionFile))) state = "in-use";
 				}
 			}
 		}
