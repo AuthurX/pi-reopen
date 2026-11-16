@@ -22,7 +22,7 @@ async function loadRecent(t) {
       }
     }
     fs.rmSync(home, { recursive: true, force: true });
-    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM', 'PI_WORKSPACE_TEST_CALLS', 'WSL_DISTRO_NAME',
+    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM', 'PI_WORKSPACE_LANG', 'PI_WORKSPACE_TEST_CALLS', 'WSL_DISTRO_NAME',
       'PI_WORKSPACE_RECENT_NOWAIT', 'PI_WORKSPACE_RECENT_WAIT', 'PI_WORKSPACE_RECENT_INUSE', 'PI_WORKSPACE_TEST_REGISTER']) delete process.env[key];
   });
 

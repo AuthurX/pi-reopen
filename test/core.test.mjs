@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+
+// 断言中文输出：显式固定语言，避免依赖运行环境的 LANG。
+process.env.PI_WORKSPACE_LANG ??= 'zh';
 import { workspacePaths } from '../src/paths.js';
 import { currentBootId, isLive, processStart } from '../src/liveness.js';
 import { clearWorkspace, deleteMember, listMembers, readMember, writeMember } from '../src/members.js';
@@ -12,7 +15,7 @@ import { acquireRestoreLock, claimSession, readClaim, releaseClaim, sweepClaims 
 import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
 import { buildTabScript, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { binfmtStatus, PERSIST_HINT } from '../src/binfmt.js';
+import { binfmtStatus, persistHint } from '../src/binfmt.js';
 import { inspect, runRestore, summarize } from '../src/restore.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
@@ -22,7 +25,7 @@ const wslOnly = { skip: ON_WSL ? false : '仅 WSL（需 /run/WSL 互操作）' }
 function fixture(t) {
   const home = fs.mkdtempSync(join(tmpdir(), 'pi-ws-core-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  const env = { HOME: home, WSL_DISTRO_NAME: 'Arch' };
+  const env = { HOME: home, WSL_DISTRO_NAME: 'Arch', PI_WORKSPACE_LANG: 'zh' };
   const paths = workspacePaths(env);
   fs.mkdirSync(paths.sessions, { recursive: true });
   return { home, env, paths };
@@ -250,7 +253,7 @@ test('runRestore refuses to spawn on failed preflight', async (t) => {
   const f = fixture(t);
   writeMember(liveEntry(f.paths, 'x', { pid: undefined, processStart: undefined, bootId: undefined }), f.paths);
   const result = await runRestore({
-    env: { HOME: f.home, WSL_DISTRO_NAME: 'Arch', PI_WORKSPACE_WEZTERM: join(f.home, 'missing.exe') },
+    env: { HOME: f.home, WSL_DISTRO_NAME: 'Arch', PI_WORKSPACE_LANG: 'zh', PI_WORKSPACE_WEZTERM: join(f.home, 'missing.exe') },
     paths: f.paths,
     piProber: () => ({ status: 0, stdout: 'pi' }),
   });
@@ -276,7 +279,8 @@ test('binfmt advisory appears only when registration exists without persistence'
   const f = fixture(t);
   const registeredNoConf = binfmtStatus({ exists: (p) => p === '/proc/sys/fs/binfmt_misc/WSLInterop', readdir: () => [], readFile: () => '' });
   assert.deepEqual(registeredNoConf, { registered: true, persistent: false });
-  assert.match(PERSIST_HINT, /systemctl restart systemd-binfmt/);
+  assert.match(persistHint('zh'), /systemctl restart systemd-binfmt/);
+  assert.match(persistHint('en'), /systemctl restart systemd-binfmt/);
   const persistent = binfmtStatus({ exists: (p) => p === '/proc/sys/fs/binfmt_misc/WSLInterop' || p === '/usr/lib/binfmt.d', readdir: () => ['WSLInterop.conf'], readFile: () => ':WSLInterop:M::MZ::/init:PF' });
   assert.equal(persistent.persistent, true);
   const unregistered = binfmtStatus({ exists: () => false, readdir: () => { throw new Error('no'); } });

@@ -11,23 +11,12 @@ import { parsePaneId, setTabTitle } from "./pane.js";
 import { runtimePlatform } from "./platform.js";
 import { currentBootId } from "./liveness.js";
 import { waitForMembers } from "./verify.js";
+import { resolveLang, t } from "./i18n.js";
 
-const STATE_LABEL = {
-	live: "运行中",
-	claimed: "启动占用中",
-	expired: "已过期",
-	filtered: "未匹配 --only",
-	deferred: "本次未处理（超出 --limit）",
-	"wrong-platform": "其他平台/发行版",
-	"missing-cwd": "工作目录缺失",
-	"missing-file": "会话文件缺失",
-	"in-use": "已在其他窗口打开",
-	duplicate: "重复条目",
-	restorable: "待恢复",
-};
-
-export function label(state) {
-	return STATE_LABEL[state] ?? state;
+export function label(state, lang = resolveLang()) {
+	const key = `state.${state}`;
+	const text = t(lang, key);
+	return text === key ? state : text;
 }
 
 /** 标签页标题：优先会话名，否则工作目录的文件夹名（需求 13）。 */
@@ -204,61 +193,68 @@ export function exitCodeFor(result) {
 	return EXIT.ok;
 }
 
-/** 生成给人看的中文报告行。 */
-export function summarize(result) {
+/** 生成给人看的报告行（按 lang 本地化）。 */
+export function summarize(result, lang = resolveLang()) {
 	const lines = [];
 	if (result.stage === "preflight") {
-		lines.push("环境预检未通过，未打开任何标签页：");
+		lines.push(t(lang, "restore.preflightHeader"));
 		for (const check of result.checks.filter((c) => !c.ok)) {
-			lines.push(`  ✖ ${check.name}：${check.detail}`);
-			if (check.hint) lines.push(`    → ${check.hint}`);
+			lines.push(t(lang, "restore.check", { name: check.name, detail: check.detail }));
+			if (check.hint) lines.push(t(lang, "restore.hint", { hint: check.hint }));
 		}
 		return lines;
 	}
 	if (result.stage === "cancelled") {
-		lines.push("已取消，未打开任何标签页。");
+		lines.push(t(lang, "restore.cancelled"));
 		return lines;
 	}
 	if (result.stage === "locked") {
-		lines.push("✖ 另一个恢复进程正在进行，本次未打开任何标签页：");
-		lines.push(`  → 持有者 pid ${result.holder?.pid}，开始于 ${new Date(result.holder?.ts).toLocaleString()}`);
+		lines.push(t(lang, "restore.lockedHeader"));
+		lines.push(t(lang, "restore.lockedHolder", {
+			pid: result.holder?.pid ?? "?",
+			ts: new Date(result.holder?.ts ?? Date.now()).toLocaleString(),
+		}));
 		return lines;
 	}
 	const counts = {};
 	for (const item of result.plan.items) counts[item.state] = (counts[item.state] ?? 0) + 1;
-	const skipped = Object.entries(counts)
+	const skippedList = Object.entries(counts)
 		.filter(([state]) => state !== "restorable")
-		.map(([state, n]) => `${label(state)} ${n}`)
+		.map(([state, n]) => t(lang, "restore.skippedItem", { label: label(state, lang), n }))
 		.join(" · ");
+	const skippedText = skippedList ? t(lang, "restore.skipped", { list: skippedList }) : "";
 	if (result.stage === "dry-run") {
-		lines.push(`[dry-run] 待恢复 ${result.plan.restorable.length} 个${skipped ? `；跳过：${skipped}` : ""}`);
+		lines.push(t(lang, "restore.dryRunHeader", { n: result.plan.restorable.length, skipped: skippedText }));
 		for (const item of result.plan.restorable) {
-			lines.push(`  → ${item.entry.name || item.entry.sessionId} | ${item.entry.cwd}`);
+			lines.push(t(lang, "restore.dryRunItem", { title: item.entry.name || item.entry.sessionId, cwd: item.entry.cwd }));
 		}
 		return lines;
 	}
 	for (const r of result.results) {
 		const title = r.entry.name || r.entry.sessionId;
 		if (r.state === "claimed") {
-			lines.push(`  ⏭ ${title}：其他恢复进程正在启动，跳过`);
+			lines.push(t(lang, "restore.claimedItem", { title }));
 		} else if (r.state === "deferred") {
-			lines.push(`  ⏭ ${title}：本次未处理（超出 --limit，下次可继续）`);
+			lines.push(t(lang, "restore.deferredItem", { title }));
 		} else if (r.aborted) {
-			lines.push(`  ⏭ ${title}：未尝试（WezTerm 请求连续失败，提前停止）`);
+			lines.push(t(lang, "restore.abortedItem", { title }));
 		} else if (!r.requested) {
-			lines.push(`  ✖ ${title}：WezTerm 请求失败 — ${r.requestError}`);
+			lines.push(t(lang, "restore.failedItem", { title, error: r.requestError }));
 		} else if (result.verification?.verified.includes(r.entry.sessionId)) {
-			lines.push(`  ✔ ${title}：已启动并确认（${r.entry.cwd}）`);
+			lines.push(t(lang, "restore.verifiedItem", { title, cwd: r.entry.cwd }));
 		} else {
-			lines.push(`  ⚠ ${title}：已创建标签页，超时未确认 pi 启动（${r.entry.cwd}）`);
+			lines.push(t(lang, "restore.unverifiedItem", { title, cwd: r.entry.cwd }));
 		}
 	}
-	const skippedText = skipped ? `；跳过：${skipped}` : "";
 	const processed = result.results.filter((r) => r.requested || r.requestError !== undefined || r.aborted).length;
 	if (!processed) {
-		lines.push(`没有待恢复的会话${skippedText}`);
+		lines.push(t(lang, "restore.none", { skipped: skippedText }));
 	} else {
-		lines.push(`已处理 ${processed} 个${skippedText}${result.aborted ? "（已提前停止）" : ""}`);
+		lines.push(t(lang, "restore.processed", {
+			n: processed,
+			skipped: skippedText,
+			aborted: result.aborted ? t(lang, "restore.abortedSuffix") : "",
+		}));
 	}
 	return lines;
 }

@@ -44,6 +44,8 @@ export default async function (pi: ExtensionAPI) {
 	const sessions = await load("sessions.js");
 	const inuse = await load("inuse.js");
 	const verify = await load("verify.js");
+	const i18n = await load("i18n.js");
+	const lang = i18n.resolveLang(process.env);
 	const preflightMod = await load("preflight.js");
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
@@ -147,11 +149,11 @@ export default async function (pi: ExtensionAPI) {
 		const hooks = await loadHooks();
 		// 与 CLI 一致：超过阈值先让用户确认，避免一键开出一屏标签页。
 		const confirm = async ({ targets }: any) => ctx.ui.confirm(
-			`将打开 ${targets.length} 个标签页`,
+			i18n.t(lang, "ext.confirmBulkTitle", { n: targets.length }),
 			targets.map((item: any) => `${item.entry.name || item.entry.sessionId}  ${item.entry.cwd}`).join("\n"),
 		);
 		const result = await restore.runRestore({ dryRun, confirm, ...hooks });
-		for (const line of restore.summarize(result)) ctx.ui.notify(line, result.ok ? "info" : "warning");
+		for (const line of restore.summarize(result, lang)) ctx.ui.notify(line, result.ok ? "info" : "warning");
 	}
 
 	async function openRecent(ctx: any): Promise<void> {
@@ -200,25 +202,25 @@ export default async function (pi: ExtensionAPI) {
 			.filter((c: any) => c.sessionId !== own && !live.has(c.sessionId)
 				&& !owners.has(inuse.normalizeSessionPath(c.sessionFile)))
 			.sort((a: any, b: any) => b.ts - a.ts);
-		const skippedNote = missingCwd ? `（${missingCwd} 个工作目录已不存在，已跳过）` : "";
+		const skippedNote = missingCwd ? i18n.t(lang, "ext.recentSkippedCwd", { n: missingCwd }) : "";
 		if (!todo.length) {
-			ctx.ui.notify(`近 24 小时没有可补选的对话${skippedNote}`, "info");
+			ctx.ui.notify(i18n.t(lang, "ext.recentNone", { skipped: skippedNote }), "info");
 			return;
 		}
 		const describe = (e: any) => `${new Date(e.ts).toLocaleString()} | ${basename(e.cwd)}${e.name ? ` · ${e.name}` : ""}`;
 		const list = todo.map((e: any, i: number) => `${i + 1}. ${describe(e)} | ${e.cwd}`).join("\n");
-		const input = await ctx.ui.input(`近期候选（不代表原先打开的窗口）${skippedNote}\n${list}\n输入序号，多个用逗号分隔；取消则不打开`);
+		const input = await ctx.ui.input(i18n.t(lang, "ext.recentPrompt", { skipped: skippedNote, list }));
 		if (!input?.trim()) return;
 		const parts = input.trim().split(/[\s,，]+/);
 		if (parts.some((p: string) => !/^\d+$/.test(p) || Number(p) < 1 || Number(p) > todo.length)) {
-			ctx.ui.notify("序号无效，未打开标签页", "warning");
+			ctx.ui.notify(i18n.t(lang, "ext.invalidIndex"), "warning");
 			return;
 		}
 		const selected = [...new Set(parts.map(Number))].map((n: number) => todo[n - 1]);
-		if (!(await ctx.ui.confirm("恢复选中的 Pi 对话？", selected.map(describe).join("\n")))) return;
+		if (!(await ctx.ui.confirm(i18n.t(lang, "ext.confirmRecent"), selected.map(describe).join("\n")))) return;
 		const pre = preflightMod.preflight();
 		if (!pre.ok) {
-			for (const line of restore.summarize({ ok: false, stage: "preflight", checks: pre.checks })) {
+			for (const line of restore.summarize({ ok: false, stage: "preflight", checks: pre.checks }, lang)) {
 				ctx.ui.notify(line, "warning");
 			}
 			return;
@@ -226,7 +228,7 @@ export default async function (pi: ExtensionAPI) {
 		// 与 CLI 恢复共用同一把全局锁：/reopen recent 不能与批量恢复叠加成标签页风暴。
 		const lock = claims.acquireRestoreLock(paths, process.pid);
 		if (lock.locked) {
-			ctx.ui.notify("另一个恢复进程正在进行，本次未打开标签页", "warning");
+			ctx.ui.notify(i18n.t(lang, "ext.locked"), "warning");
 			return;
 		}
 		try {
@@ -247,7 +249,7 @@ export default async function (pi: ExtensionAPI) {
 				});
 				if (!result.ok) {
 					claims.releaseClaim(entry.sessionId, paths);
-					ctx.ui.notify(`${entry.cwd}：WezTerm 请求失败 — ${result.error}`, "warning");
+					ctx.ui.notify(i18n.t(lang, "ext.spawnFailed", { cwd: entry.cwd, error: result.error }), "warning");
 					continue;
 				}
 				await restore.setTitle({ wezterm: pre.wezterm, stdout: result.stdout, entry, env: process.env });
@@ -280,11 +282,11 @@ export default async function (pi: ExtensionAPI) {
 			const unverified = verification?.unverified ?? [];
 			for (const id of unverified) claims.releaseClaim(id, paths); // 未确认时允许立即重试
 			if (!requested.length) {
-				ctx.ui.notify("没有打开任何标签页", "warning");
+				ctx.ui.notify(i18n.t(lang, "ext.noneOpened"), "warning");
 			} else if (unverified.length) {
-				ctx.ui.notify(`已请求打开 ${requested.length} 个 pi 终端；${unverified.length} 个超时未确认启动`, "warning");
+				ctx.ui.notify(i18n.t(lang, "ext.recentOpenedUnverified", { n: requested.length, m: unverified.length }), "warning");
 			} else {
-				ctx.ui.notify(`已请求打开 ${requested.length} 个 pi 终端${verification ? "，已确认启动" : ""}`, "info");
+				ctx.ui.notify(i18n.t(lang, verification ? "ext.recentOpenedVerified" : "ext.recentOpened", { n: requested.length }), "info");
 			}
 		} finally {
 			claims.releaseRestoreLock(paths, process.pid);
@@ -295,12 +297,12 @@ export default async function (pi: ExtensionAPI) {
 		const arg = (args ?? "").trim();
 		if (arg === "clear") {
 			const removed = members.clearWorkspace(paths);
-			ctx.ui.notify(`已清空 ${removed} 条登记；对话文件未删除`, "info");
+			ctx.ui.notify(i18n.t(lang, "ext.clear", { n: removed }), "info");
 			return;
 		}
 		if (arg === "recent") return openRecent(ctx);
 		if (arg) {
-			ctx.ui.notify("用法：/reopen | /reopen recent | /reopen clear", "warning");
+			ctx.ui.notify(i18n.t(lang, "ext.reopenUsage"), "warning");
 			return;
 		}
 		await restoreAndReport(ctx);
@@ -315,7 +317,7 @@ export default async function (pi: ExtensionAPI) {
 	pi.registerCommand("all", {
 		description: "（已改名为 /reopen）恢复已登记的 pi 终端",
 		handler: async (args: string, ctx: any) => {
-			ctx.ui.notify("/all 已改名为 /reopen", "warning");
+			ctx.ui.notify(i18n.t(lang, "ext.aliasNotice"), "warning");
 			await runReopen(args, ctx);
 		},
 	});

@@ -1,15 +1,17 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { resolveLang, t } from "./i18n.js";
 
 const BINFMT_ENTRY = "/proc/sys/fs/binfmt_misc/WSLInterop";
 const CONF_DIRS = ["/etc/binfmt.d", "/usr/lib/binfmt.d", "/run/binfmt.d", "/lib/binfmt.d"];
 export const BINFMT_CONF_CONTENT = ":WSLInterop:M::MZ::/init:PF";
 
-export const PERSIST_HINT =
-	"WSLInterop 注册可能在 WSL 重启后再次丢失（未发现 binfmt.d 持久化配置）。\n" +
-	"一次性持久化（需 sudo 密码，工具不会自动执行）：\n" +
-	`printf '%s\\n' '${BINFMT_CONF_CONTENT}' | sudo tee /usr/lib/binfmt.d/WSLInterop.conf >/dev/null\n` +
-	"echo -1 | sudo tee /proc/sys/fs/binfmt_misc/WSLInterop >/dev/null\n" +
-	"sudo systemctl restart systemd-binfmt";
+/** 语言无关的一次性注册命令；说明文字由 i18n 提供。 */
+export const BINFMT_FIX_COMMAND =
+	"printf '%s\\n' ':WSLInterop:M::MZ::/init:P' | sudo tee /proc/sys/fs/binfmt_misc/register >/dev/null";
+
+export function persistHint(lang = resolveLang()) {
+	return t(lang, "binfmt.persistHint");
+}
 
 /**
  * WSLInterop 注册状态与持久化状态：

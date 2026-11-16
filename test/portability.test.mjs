@@ -25,7 +25,7 @@ function fixture(t) {
   fs.writeFileSync(wezterm, 'MZ');
   const env = { HOME: root, PATH: `${bin}:/usr/bin:/bin`, WSL_DISTRO_NAME: 'Test',
     PI_CODING_AGENT_DIR: join(root, "agent's $data"), PI_WORKSPACE_PI_BIN: pi,
-    PI_WORKSPACE_WEZTERM: wezterm };
+    PI_WORKSPACE_WEZTERM: wezterm, PI_WORKSPACE_LANG: 'zh' };
   return { root, bin, pi, wezterm, env };
 }
 

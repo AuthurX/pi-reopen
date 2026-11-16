@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+
+// 断言中文输出：显式固定语言，避免依赖运行环境的 LANG。
+process.env.PI_WORKSPACE_LANG ??= 'zh';
 import { workspacePaths } from '../src/paths.js';
 import { currentBootId, isLive, processStart } from '../src/liveness.js';
 import { listMembers, writeMember } from '../src/members.js';
@@ -14,7 +17,7 @@ import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { parsePaneId, sanitizeTitle } from '../src/pane.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { EXIT, defaultWaitTimeoutMs, exitCodeFor, inspect, runRestore, summarize, tabTitle } from '../src/restore.js';
+import { EXIT, defaultWaitTimeoutMs, exitCodeFor, inspect, label, runRestore, summarize, tabTitle } from '../src/restore.js';
 import { forgetMembers, pruneMembers, resolveMemberIds } from '../src/prune.js';
 import { collectOnly, displayWidth, jsonPayload, normalizeArgv, run as cliRun } from '../src/cli.js';
 
@@ -26,7 +29,7 @@ const wslOnly = { skip: ON_WSL ? false : '仅 WSL（需 /run/WSL 互操作）' }
 function fixture(t) {
   const home = fs.mkdtempSync(join(tmpdir(), 'pi-ws-deep-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
-  const env = { HOME: home, WSL_DISTRO_NAME: 'Arch' };
+  const env = { HOME: home, WSL_DISTRO_NAME: 'Arch', PI_WORKSPACE_LANG: 'zh' };
   const paths = workspacePaths(env);
   fs.mkdirSync(paths.sessions, { recursive: true });
   return { home, env, paths };
@@ -437,7 +440,39 @@ test('default verification window scales with the batch size', () => {
   assert.equal(defaultWaitTimeoutMs(100), 90_000, '窗口有上限，避免无限等待');
 });
 
-test('CLI entry conventions: --help and --version succeed instead of printing usage', async () => {
+test('i18n: language follows the environment and reports localize', async (t) => {
+  const { resolveLang, t: translate } = await import('../src/i18n.js');
+  assert.equal(resolveLang({ PI_WORKSPACE_LANG: 'en' }), 'en');
+  assert.equal(resolveLang({ PI_WORKSPACE_LANG: 'zh-CN' }), 'zh');
+  assert.equal(resolveLang({ LANG: 'zh_CN.UTF-8' }), 'zh');
+  assert.equal(resolveLang({ LANG: 'C.UTF-8' }), 'en', '非中文 locale 默认英文');
+  assert.equal(translate('en', 'state.live'), 'running');
+  assert.equal(translate('zh', 'state.live'), '运行中');
+  assert.equal(translate('en', 'restore.processed', { n: 2, skipped: '', aborted: '' }), 'Processed 2');
+  assert.equal(label('restorable', 'en'), 'pending restore');
+
+  const f = fixture(t);
+  const entry = { ...liveEntry(f.paths, 'i18n-entry'), ...(await deadIdentity()) };
+  writeMember(entry, f.paths);
+  const plan = buildRestorePlan({ members: [entry], paths: f.paths, liveFn: () => false, bootId: currentBootId() });
+  const lines = summarize({
+    ok: true,
+    stage: 'done',
+    plan,
+    results: [{ ...plan.items[0], requested: true }],
+    verification: { verified: ['i18n-entry'], unverified: [] },
+  }, 'en');
+  assert.match(lines.join('\n'), /started and confirmed/);
+  assert.doesNotMatch(lines.join('\n'), /已启动并确认/);
+
+  const out = [];
+  const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
+  await cliRun(['--help'], { stdout, env: { PI_WORKSPACE_LANG: 'en' } });
+  assert.match(out.join('\n'), /^pi-reopen — reopen the Pi sessions/);
+  assert.match(out.join('\n'), /Exit codes/);
+});
+
+test('CLI entry conventions: --help and --version succeed instead of printing usage', async (t) => {
   const out = [];
   const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
   assert.equal(await cliRun(['--help'], { stdout, env: {} }), 0);

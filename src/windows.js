@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { win32 } from "node:path";
 import { agentDir } from "./paths.js";
+import { resolveLang, t } from "./i18n.js";
 import { envValue } from "./platform.js";
 
 export function powershellQuote(value) {
@@ -40,7 +41,7 @@ export function discoverWindowsPi(env = process.env, deps = {}) {
 }
 
 export function buildWindowsScript({ cwd, sessionFile, piCommand, env = process.env }) {
-	if (!piCommand?.length) throw new Error("Windows Pi 启动命令未经预检");
+	if (!piCommand?.length) throw new Error(t(resolveLang(env), "windows.noPiCommand"));
 	const path = [win32.dirname(piCommand[0]), envValue(env, "PATH")].filter(Boolean).join(";");
 	return [
 		"$ErrorActionPreference = 'Stop'",

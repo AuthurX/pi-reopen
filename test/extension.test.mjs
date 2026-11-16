@@ -27,6 +27,7 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
       'WEZTERM_PANE', 'PI_WORKSPACE_PANE_ALIVE']) delete process.env[key];
   });
   process.env.PI_CODING_AGENT_DIR = join(home, '.pi', 'agent');
+  process.env.PI_WORKSPACE_LANG = 'zh';
   process.env.PI_WORKSPACE_SRC = join(project, 'src');
   process.env.PI_WORKSPACE_WEZTERM = join(home, 'wez.exe');
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');

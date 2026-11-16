@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import { resolveLang, t } from "./i18n.js";
 import { launchSetup, shellQuote } from "./launch.js";
 import { powershellArgs, powershellPath, runtimePlatform } from "./platform.js";
 import { buildWindowsScript } from "./windows.js";
@@ -29,7 +30,7 @@ function defaultSpawner(program, args, timeoutMs = SPAWN_TIMEOUT_MS, env = proce
 		let stderr = "";
 		let settled = false;
 		const timer = setTimeout(() => {
-			settle({ ok: false, error: `wezterm cli 超过 ${timeoutMs}ms 无响应（WezTerm 可能已卡死），已终止该请求` });
+			settle({ ok: false, error: t(resolveLang(env), "spawn.timeout", { ms: timeoutMs }) });
 			try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
 		}, timeoutMs);
 		const settle = (result) => {
@@ -43,7 +44,7 @@ function defaultSpawner(program, args, timeoutMs = SPAWN_TIMEOUT_MS, env = proce
 		child.on("error", (error) => settle({ ok: false, error: String(error) }));
 		child.on("close", (code) => {
 			if (code === 0) settle({ ok: true, stdout: stdout.trim() });
-			else settle({ ok: false, error: stderr.trim() || `wezterm cli 退出码 ${code}` });
+			else settle({ ok: false, error: stderr.trim() || t(resolveLang(env), "spawn.exitCode", { code }) });
 		});
 	});
 }
@@ -63,7 +64,7 @@ export async function openTab({ wezterm, distro, cwd, sessionFile, piBin, piComm
 		const script = buildTabScript({ cwd, sessionFile, piBin, env });
 		command = [...(platform === "wsl" ? ["wsl.exe", ...(distro ? ["-d", distro] : []), "-e"] : []), "bash", "-lc", script];
 	} else {
-		return { ok: false, error: `不支持的平台：${platform}` };
+		return { ok: false, error: t(resolveLang(env), "spawn.unsupportedPlatform", { platform }) };
 	}
 	// Native paths must never be sent to an SSH/WSL domain selected by the current pane.
 	const args = ["cli", "spawn", "--domain-name", "local", "--", ...command];

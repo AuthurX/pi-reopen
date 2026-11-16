@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
-import { binfmtStatus, PERSIST_HINT } from "./binfmt.js";
+import { binfmtStatus, persistHint } from "./binfmt.js";
+import { resolveLang, t } from "./i18n.js";
 import { workspacePaths } from "./paths.js";
 import { currentBootId, isLive } from "./liveness.js";
 import { clearWorkspace } from "./members.js";
@@ -10,33 +11,6 @@ import { exitCodeFor, inspect, label, runRestore, summarize } from "./restore.js
 import { preflight } from "./preflight.js";
 import { runtimePlatform } from "./platform.js";
 import { packageVersion } from "./version.js";
-
-const USAGE = `pi-reopen — 恢复上次的 Pi 终端组合
-
-用法：
-  pi-reopen                       # 补开上次关闭时仍打开的 Pi（已运行的跳过）
-  pi-reopen restore [选项]        # 显式恢复；选项见下
-  pi-reopen --dry-run             # 等价于 restore --dry-run
-  pi-reopen --help | --version    # 用法 / 版本号
-  pi-reopen list [--wide]         # 查看登记成员与状态（长内容默认按终端宽度截断，--wide 不截断）
-  pi-reopen forget <id|前缀> ...  # 删除指定登记（不删除对话文件）
-  pi-reopen prune [--dry-run]     # 清理过期/无法恢复的记录（默认保留最近 14 天）
-  pi-reopen doctor                # 环境检查（平台 / WezTerm / pi / 进程身份）
-  pi-reopen clear                 # 清空登记（不删除对话文件）
-
-restore 选项：
-  --dry-run            只打印计划，不开标签页
-  --no-wait            发出请求后立即返回，不等待 pi 登记确认
-  --json               输出机器可读的 JSON（便于脚本消费）
-  --only <模式>        只恢复匹配的会话；子串或 * 通配符，可重复/逗号分隔
-  --limit <N>          本次最多开 N 个标签页（其余保留待下次）
-  --delay <ms>         每个标签页之间等待的毫秒数（缓解批量启动压力）
-  --yes                跳过批量确认提示（超过 5 个时默认会询问）
-
-每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
-默认在全部请求发出后等待各 pi 启动并登记再报告，--no-wait 跳过该等待。
-
-退出码：0 成功；1 请求失败/用法错误；2 预检失败；3 请求已发但未确认；4 仅有跳过项。`;
 
 /** 单字符显示宽度：CJK/全角记 2，其余记 1（东亚宽度简化表）。 */
 function charWidth(cp) {
@@ -144,10 +118,10 @@ function truncateTo(str, width) {
 const SEP = " | ";
 
 /** 对齐表格：状态/会话/路径/时间；超宽时截断会话名/路径；终端过窄放不下表格时退回未对齐的简单行。 */
-function listLines({ plan }, { termWidth = 80 } = {}) {
-	if (!plan.items.length) return ["没有登记成员。关闭 WezTerm 时仍打开的 Pi 会在下次启动后自动登记。"];
+function listLines({ plan }, { termWidth = 80, lang = resolveLang() } = {}) {
+	if (!plan.items.length) return [t(lang, "cli.listEmpty")];
 	const rows = plan.items.map((item) => [
-		label(item.state),
+		label(item.state, lang),
 		item.entry.name || item.entry.sessionId,
 		item.entry.cwd ?? "",
 		new Date(item.entry.ts).toLocaleString(),
@@ -165,7 +139,7 @@ function listLines({ plan }, { termWidth = 80 } = {}) {
 	}
 	const widths = [stateW, titleW, cwdW, whenW];
 	const render = (cells) => cells.map((c, i) => padTo(truncateTo(c, widths[i]), widths[i])).join(SEP);
-	return [render(["状态", "会话", "路径", "时间"]), ...rows.map(render)];
+	return [render([t(lang, "cli.listState"), t(lang, "cli.listSession"), t(lang, "cli.listPath"), t(lang, "cli.listTime")]), ...rows.map(render)];
 }
 
 /** 交互确认；非 TTY（管道、CI）不阻塞，保持可脚本化。 */
@@ -182,6 +156,7 @@ export async function promptYesNo(question, { input = process.stdin, output = pr
 
 export async function run(argv = [], { stdout = process.stdout, env = process.env, stdin = process.stdin, confirm: confirmOverride } = {}) {
 	const { command, flags } = normalizeArgv(argv);
+	const lang = resolveLang(env);
 	const hasFlag = (name) => flags.includes(name);
 	const write = (line) => {
 		try {
@@ -198,11 +173,11 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 
 	switch (command) {
 		case "help": {
-			write(USAGE);
+			write(t(lang, "cli.usage"));
 			return 0;
 		}
 		case "version": {
-			write(`pi-reopen ${packageVersion()}`);
+			write(t(lang, "cli.version", { version: packageVersion() }));
 			return 0;
 		}
 		case "restore": {
@@ -218,7 +193,7 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 					const list = targets
 						.map((item) => `  ${item.entry.name || item.entry.sessionId}  ${item.entry.cwd}`)
 						.join("\n");
-					return promptYesNo(`将打开 ${targets.length} 个标签页：\n${list}\n继续？[y/N] `, { input: stdin, output: stdout });
+					return promptYesNo(`${t(lang, "cli.confirmBulk", { n: targets.length })}\n${list}\n[y/N] `, { input: stdin, output: stdout });
 				});
 			const result = await runRestore({
 				env,
@@ -258,38 +233,42 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 			if (!Number.isFinite(columns) || columns <= 0) columns = 80;
 			const lines = listLines(inspected, {
 				termWidth: wide ? Number.POSITIVE_INFINITY : columns,
+				lang,
 			});
 			for (const line of lines) write(line);
 			return 0;
 		}
 		case "doctor": {
-			const pre = preflight({ env });
+			const pre = preflight({ env, lang });
 			for (const check of pre.checks) {
-				write(`${check.ok ? "✔" : "✖"} ${check.name}：${check.detail}`);
-				if (check.hint) write(`  → ${check.hint}`);
+				write(t(lang, "cli.doctorCheck", { mark: check.ok ? "✔" : "✖", name: check.name, detail: check.detail }));
+				if (check.hint) write(t(lang, "restore.hint", { hint: check.hint }));
 			}
 			const binfmt = runtimePlatform(env) === "wsl" ? binfmtStatus() : {};
 			if (binfmt.registered && !binfmt.persistent) {
-				write("⚠ WSLInterop 已注册但未持久化：");
-				for (const line of PERSIST_HINT.split("\n")) write(`  ${line}`);
+				write(t(lang, "cli.binfmtWarning"));
+				for (const line of persistHint(lang).split("\n")) write(`  ${line}`);
 			}
-			write(pre.ok ? "环境就绪。" : "存在未通过项，恢复前需先解决。");
+			write(pre.ok ? t(lang, "cli.doctorReady") : t(lang, "cli.doctorBlocked"));
 			return pre.ok ? 0 : 2;
 		}
 		case "forget": {
 			const targets = flags.filter((flag) => !flag.startsWith("-"));
 			if (!targets.length) {
-				write("用法：pi-reopen forget <会话 id 或唯一前缀> [...]");
+				write(t(lang, "cli.forgetUsage"));
 				return 1;
 			}
 			const paths = workspacePaths(env);
 			const { ids, missing, ambiguous } = resolveMemberIds(targets, paths);
 			for (const item of ambiguous) {
-				write(`✖ 前缀「${item.input}」有歧义，匹配：${item.candidates.join(", ")}`);
+				write(t(lang, "cli.forgetAmbiguous", { input: item.input, candidates: item.candidates.join(", ") }));
 			}
 			if (ambiguous.length) return 1;
 			const removed = forgetMembers(ids, paths);
-			write(`已移除 ${removed} 条登记${missing.length ? `；未找到：${missing.join(", ")}` : ""}`);
+			write(t(lang, "cli.forgetRemoved", {
+				n: removed,
+				missing: missing.length ? t(lang, "cli.forgetMissing", { list: missing.join(", ") }) : "",
+			}));
 			return missing.length && !removed ? 1 : 0;
 		}
 		case "prune": {
@@ -303,18 +282,21 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 				distro: env.WSL_DISTRO_NAME,
 			});
 			for (const entry of result.removed) {
-				write(`  − ${entry.name || entry.sessionId}：${entry.cwd ?? ""}`);
+				write(t(lang, "cli.pruneItem", { title: entry.name || entry.sessionId, cwd: entry.cwd ?? "" }));
 			}
-			write(`${dryRun ? "[dry-run] 将清理" : "已清理"} ${result.removed.length} 条记录${result.kept ? `；保留 ${result.kept} 条` : ""}`);
+			write(t(lang, dryRun ? "cli.pruneDryRun" : "cli.pruneDone", {
+				n: result.removed.length,
+				kept: result.kept ? t(lang, "cli.pruneKept", { n: result.kept }) : "",
+			}));
 			return 0;
 		}
 		case "clear": {
 			const removed = clearWorkspace(workspacePaths(env));
-			write(`已清空 ${removed} 条登记与启动占用；对话文件与旧格式记录未删除。`);
+			write(t(lang, "cli.clear", { n: removed }));
 			return 0;
 		}
 		default:
-			write(USAGE);
+			write(t(lang, "cli.usage"));
 			return 1;
 	}
 }
