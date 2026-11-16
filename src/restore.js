@@ -5,12 +5,14 @@ import { preflight } from "./preflight.js";
 import { openTab } from "./spawn.js";
 import { workspacePaths } from "./paths.js";
 import { scanSessionOwners } from "./inuse.js";
+import { runtimePlatform } from "./platform.js";
 import { currentBootId } from "./liveness.js";
 import { waitForMembers } from "./verify.js";
 
 const STATE_LABEL = {
 	live: "运行中",
 	claimed: "启动占用中",
+	"wrong-platform": "其他平台/发行版",
 	"missing-cwd": "工作目录缺失",
 	"missing-file": "会话文件缺失",
 	"in-use": "已在其他窗口打开",
@@ -23,14 +25,16 @@ export function label(state) {
 }
 
 /** 只读：列出全部成员与状态（list / dry-run 共用）。 */
-export function inspect({ paths = workspacePaths(), owners } = {}) {
+export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro } = {}) {
 	const members = listMembers(paths);
 	const plan = buildRestorePlan({
 		members,
 		paths,
 		claimFn: () => false,
 		bootId: currentBootId(),
-		owners: owners ?? scanSessionOwners(),
+		owners: owners ?? scanSessionOwners({ env }),
+		platform: platform ?? runtimePlatform(env),
+		distro: distro ?? env.WSL_DISTRO_NAME,
 	});
 	return { members, plan };
 }
@@ -60,7 +64,7 @@ export async function runRestore({
 		return { ok: false, stage: "preflight", checks: pre.checks };
 	}
 	sweepClaims(paths);
-	const { plan } = inspect({ paths, owners });
+	const { plan } = inspect({ paths, owners, env, platform: pre.platform, distro: pre.distro });
 	if (dryRun) {
 		return { ok: true, stage: "dry-run", plan };
 	}

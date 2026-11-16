@@ -3,6 +3,7 @@
  * 核心逻辑在项目 src/*.js（CLI 共用）；本文件只做 Pi 侧适配。
  */
 import { realpathSync } from "node:fs";
+import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -35,6 +36,7 @@ export default async function (pi: ExtensionAPI) {
 	const { workspacePaths } = await load("paths.js");
 	const members = await load("members.js");
 	const liveness = await load("liveness.js");
+	const platform = await load("platform.js");
 	const claims = await load("claims.js");
 	const restore = await load("restore.js");
 	const spawn = await load("spawn.js");
@@ -91,6 +93,11 @@ export default async function (pi: ExtensionAPI) {
 			pid: process.pid,
 			processStart: liveness.processStart(process.pid),
 			bootId: liveness.currentBootId(),
+			// 共用 agent 目录时（例如 Windows 与 WSL）必须能识别记录来源，
+			// 否则会用错误的平台/发行版去启动，开出一个必然失败的标签页。
+			platform: platform.runtimePlatform(process.env),
+			distro: process.env.WSL_DISTRO_NAME,
+			user: userInfo().username,
 		});
 		claims.releaseClaim(currentSessionId, paths);
 	}
@@ -222,7 +229,16 @@ export default async function (pi: ExtensionAPI) {
 				sessionFile: entry.sessionFile,
 			});
 			if (result.ok) {
-				members.writeMember({ ...entry, pid: undefined, processStart: undefined, bootId: undefined, ts: Date.now() });
+				members.writeMember({
+					...entry,
+					pid: undefined,
+					processStart: undefined,
+					bootId: undefined,
+					ts: Date.now(),
+					platform: platform.runtimePlatform(process.env),
+					distro: process.env.WSL_DISTRO_NAME,
+					user: userInfo().username,
+				});
 				opened++;
 			} else {
 				claims.releaseClaim(entry.sessionId, paths);

@@ -129,6 +129,22 @@ test('plan marks sessions claimed by another restore as claimed', async (t) => {
   assert.equal(plan.restorable.length, 0);
 });
 
+test('plan rejects records written by another platform or WSL distro', (t) => {
+  const f = fixture(t);
+  const foreign = { ...liveEntry(f.paths, 'windows-entry'), pid: undefined, platform: 'win32' };
+  const otherDistro = { ...liveEntry(f.paths, 'ubuntu-entry'), pid: undefined, platform: 'wsl', distro: 'Ubuntu' };
+  const sameDistro = { ...liveEntry(f.paths, 'arch-entry'), pid: undefined, platform: 'wsl', distro: 'Arch' };
+  const legacy = { ...liveEntry(f.paths, 'legacy-entry'), pid: undefined };
+  delete legacy.platform;
+  for (const entry of [foreign, otherDistro, sameDistro, legacy]) writeMember(entry, f.paths);
+  const { plan } = inspect({ paths: f.paths, platform: 'wsl', distro: 'Arch', owners: new Map() });
+  const byId = Object.fromEntries(plan.items.map((i) => [i.entry.sessionId, i.state]));
+  assert.equal(byId['windows-entry'], 'wrong-platform');
+  assert.equal(byId['ubuntu-entry'], 'wrong-platform');
+  assert.equal(byId['arch-entry'], 'restorable');
+  assert.equal(byId['legacy-entry'], 'restorable', '缺少 platform 的旧记录必须继续可恢复');
+});
+
 test('plan skips a session file already opened by another Pi process (no double writer)', async (t) => {
   const f = fixture(t);
   const entry = { ...liveEntry(f.paths, 'busy'), ...(await deadIdentity()) };

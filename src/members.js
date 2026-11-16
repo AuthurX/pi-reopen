@@ -9,6 +9,9 @@ import {
 import { join } from "node:path";
 import { workspacePaths } from "./paths.js";
 
+/** 记录结构版本：新增字段时递增；旧记录缺少新字段时按“未知”兼容处理。 */
+export const MEMBER_SCHEMA = 2;
+
 /**
  * 成员记录语义（已确认规则）：
  * - Pi 打开（session_start）→ 写入/刷新记录（含 pid、processStart、bootId）
@@ -23,7 +26,8 @@ function writeAtomic(file, data) {
 
 export function writeMember(entry, paths = workspacePaths()) {
 	mkdirSync(paths.members, { recursive: true });
-	writeAtomic(join(paths.members, `${entry.sessionId}.json`), JSON.stringify(entry, null, 2));
+	const record = { schemaVersion: MEMBER_SCHEMA, ...entry };
+	writeAtomic(join(paths.members, `${entry.sessionId}.json`), JSON.stringify(record, null, 2));
 }
 
 export function readMember(sessionId, paths = workspacePaths()) {

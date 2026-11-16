@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { normalizeSessionPath } from "./inuse.js";
 import { isLive } from "./liveness.js";
 import { workspacePaths } from "./paths.js";
+import { runtimePlatform } from "./platform.js";
 
 /** 由记录定位会话文件：优先记录内绝对路径，否则按 sessionId 扫描会话目录。 */
 export function resolveSessionFile(entry, paths = workspacePaths()) {
@@ -32,6 +33,7 @@ function dedupeKey(sessionFile) {
  * 生成恢复计划。状态语义：
  * live        进程仍存活，跳过（也自然排除了发起恢复的当前会话）
  * claimed     其他恢复进程正在启动它，跳过
+ * wrong-platform 记录来自其他系统/发行版（共用 agent 目录时），跳过并报告
  * missing-cwd 工作目录不存在，跳过并报告
  * missing-file 会话文件不存在（未落盘/已删除），跳过并报告
  * in-use      会话文件已被另一个 Pi 进程打开（即使没有登记），跳过以避免双写
@@ -45,6 +47,8 @@ export function buildRestorePlan({
 	claimFn,
 	bootId,
 	owners,
+	platform = runtimePlatform(),
+	distro = process.env.WSL_DISTRO_NAME,
 }) {
 	const seen = new Set();
 	const items = [];
@@ -57,6 +61,11 @@ export function buildRestorePlan({
 			state = "live";
 		} else if (claimFn?.(entry.sessionId)) {
 			state = "claimed";
+		} else if (
+			(entry.platform && entry.platform !== platform) ||
+			(entry.platform === "wsl" && distro && entry.distro && entry.distro !== distro)
+		) {
+			state = "wrong-platform";
 		} else if (!existsSync(entry.cwd)) {
 			state = "missing-cwd";
 		} else {

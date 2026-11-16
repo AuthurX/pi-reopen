@@ -69,6 +69,9 @@ test('extension registers command/shortcut; only tui mode records members', asyn
   assert.equal(member.sessionId, 'current');
   assert.equal(member.cwd, f.home);
   assert.ok(member.pid > 0 && member.bootId, 'live identity recorded');
+  assert.equal(member.schemaVersion, 2, '记录结构版本必须落盘');
+  assert.ok(['wsl', 'linux', 'darwin', 'win32'].includes(member.platform), '记录来源平台');
+  assert.equal(typeof member.user, 'string', '记录用户，便于诊断跨用户共用目录');
 });
 
 test('new sessions register lazily after the first user message persists a file', async (t) => {
