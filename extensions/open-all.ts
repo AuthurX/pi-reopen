@@ -70,6 +70,20 @@ export default async function (pi: ExtensionAPI) {
 
 	let currentSessionId: string | undefined;
 	let signalExit = false;
+	// 进程身份只取一次：Windows 上 processStart 是一次 PowerShell 启动，
+	// 每条用户消息都重新查询会给输入带来可感知的延迟。
+	let cachedIdentity: { processStart?: string; bootId?: string } | undefined;
+	let writeFailureNotified = false;
+
+	function identity(): { processStart?: string; bootId?: string } {
+		if (!cachedIdentity) {
+			cachedIdentity = {
+				processStart: liveness.processStart(process.pid),
+				bootId: liveness.currentBootId(),
+			};
+		}
+		return cachedIdentity;
+	}
 	const signals = ["SIGHUP", "SIGTERM"] as const;
 	const markSignalExit = () => { signalExit = true; };
 	function detachSignals(): void {
@@ -102,27 +116,55 @@ export default async function (pi: ExtensionAPI) {
 		if (event?.message?.role === "user") register(ctx);
 	});
 
+	// /name 改名后立即刷新记录，否则列表和标签页标题会一直用旧名字。
+	pi.on("session_info_changed", (_event: any, ctx: any) => {
+		register(ctx);
+	});
+
 	function register(ctx: any): void {
 		if (ctx.mode !== "tui") return;
-		const sessionFile = ctx.sessionManager.getSessionFile();
-		if (!sessionFile) return; // 仍未落盘的空窗口，不登记（恢复时跳过）
-		currentSessionId = ctx.sessionManager.getSessionId();
-		members.writeMember({
-			sessionId: currentSessionId,
-			cwd: ctx.cwd,
-			sessionFile,
-			name: ctx.sessionManager.getSessionName(),
-			ts: Date.now(),
-			pid: process.pid,
-			processStart: liveness.processStart(process.pid),
-			bootId: liveness.currentBootId(),
-			// 共用 agent 目录时（例如 Windows 与 WSL）必须能识别记录来源，
-			// 否则会用错误的平台/发行版去启动，开出一个必然失败的标签页。
-			platform: platform.runtimePlatform(process.env),
-			distro: process.env.WSL_DISTRO_NAME,
-			user: userInfo().username,
-		});
-		claims.releaseClaim(currentSessionId, paths);
+		let sessionFile: string | undefined;
+		let sessionId: string | undefined;
+		let sessionName: string | undefined;
+		try {
+			sessionFile = ctx.sessionManager.getSessionFile();
+			if (!sessionFile) return; // 仍未落盘的空窗口，不登记（恢复时跳过）
+			sessionId = ctx.sessionManager.getSessionId();
+			sessionName = ctx.sessionManager.getSessionName();
+		} catch {
+			return; // 宿主 API 变动时宁可不登记，也不要打断消息流程
+		}
+		currentSessionId = sessionId;
+		const { processStart, bootId } = identity();
+		try {
+			members.writeMember({
+				sessionId,
+				cwd: ctx.cwd,
+				sessionFile,
+				name: sessionName,
+				ts: Date.now(),
+				pid: process.pid,
+				processStart,
+				bootId,
+				// 共用 agent 目录时（例如 Windows 与 WSL）必须能识别记录来源，
+				// 否则会用错误的平台/发行版去启动，开出一个必然失败的标签页。
+				platform: platform.runtimePlatform(process.env),
+				distro: process.env.WSL_DISTRO_NAME,
+				user: userInfo().username,
+			});
+		} catch (error) {
+			// 权限/磁盘问题只提示一次，避免每条消息都弹窗；Pi 的消息流程继续。
+			if (!writeFailureNotified) {
+				writeFailureNotified = true;
+				ctx.ui?.notify?.(i18n.t(lang, "ext.writeFailed", { error: String(error) }), "warning");
+			}
+			return;
+		}
+		try {
+			claims.releaseClaim(sessionId, paths);
+		} catch {
+			/* 声明清理失败不影响登记 */
+		}
 	}
 
 	/**

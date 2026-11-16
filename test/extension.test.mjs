@@ -59,6 +59,26 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
     hooks: (await import(pathToFileURL(join(project, 'test', 'fixtures', 'test-hooks.mjs')))) };
 }
 
+test('registration write failures notify once and never throw', async (t) => {
+  const f = await loadExtension(t);
+  // 用一个同名文件占住 members 目录，让 writeMember 必然失败。
+  fs.writeFileSync(join(f.agentDir, 'pi-workspace', 'members'), 'not-a-dir');
+  f.events.session_start({}, f.context);
+  f.events.message_end({ message: { role: 'user' } }, f.context);
+  f.events.message_end({ message: { role: 'user' } }, f.context);
+  const warnings = f.notices.filter((notice) => /登记写入失败/.test(notice));
+  assert.equal(warnings.length, 1, '写失败只提示一次，且不能抛到 Pi 的消息流程里');
+});
+
+test('/name changes refresh the registered name immediately', async (t) => {
+  const f = await loadExtension(t);
+  f.events.session_start({}, f.context);
+  const ctx = { ...f.context, sessionManager: { ...f.context.sessionManager, getSessionName: () => 'renamed-task' } };
+  f.events.session_info_changed({ name: 'renamed-task' }, ctx);
+  const member = JSON.parse(fs.readFileSync(join(f.membersDir, 'current.json'), 'utf8'));
+  assert.equal(member.name, 'renamed-task');
+});
+
 test('extension writes a self-record so doctor can detect it', async (t) => {
   const f = await loadExtension(t);
   const record = JSON.parse(fs.readFileSync(join(f.agentDir, 'pi-workspace', 'extension.json'), 'utf8'));

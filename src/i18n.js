@@ -202,6 +202,10 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	},
 
 	// Pi 内入口
+	"ext.writeFailed": {
+		zh: "登记写入失败：{error}；恢复集合可能不完整。请检查登记目录权限。",
+		en: "Failed to write the registration: {error}. The restore set may be incomplete; check registry permissions.",
+	},
 	"ext.recentNone": { zh: "近 24 小时没有可补选的对话{skipped}", en: "No conversations from the last 24h to pick up{skipped}" },
 	"ext.recentSkippedCwd": { zh: "（{n} 个工作目录已不存在，已跳过）", en: " ({n} working directories no longer exist, skipped)" },
 	"ext.recentPrompt": { zh: "近期候选（不代表原先打开的窗口）{skipped}\n{list}\n输入序号，多个用逗号分隔；取消则不打开", en: "Recent candidates (not the windows you had open){skipped}\n{list}\nEnter indexes separated by commas; cancel to skip" },
