@@ -70,6 +70,16 @@ test('registration write failures notify once and never throw', async (t) => {
   assert.equal(warnings.length, 1, '写失败只提示一次，且不能抛到 Pi 的消息流程里');
 });
 
+test('a changed Pi extension API warns once instead of silently stopping', async (t) => {
+  const f = await loadExtension(t);
+  const ctx = { ...f.context, sessionManager: {} };
+  f.events.session_start({}, ctx);
+  f.events.message_end({ message: { role: 'user' } }, ctx);
+  const warnings = f.notices.filter((notice) => /扩展 API 可能已变更/.test(notice));
+  assert.equal(warnings.length, 1, 'API 变更必须显式告警一次');
+  assert.equal(f.memberCount(), 0);
+});
+
 test('/name changes refresh the registered name immediately', async (t) => {
   const f = await loadExtension(t);
   f.events.session_start({}, f.context);

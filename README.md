@@ -86,7 +86,7 @@ pi-reopen doctor
 
 - `pi install` registers and loads the extension, but does not guarantee the CLI is on a regular shell's PATH; `npm install -g` installs the external CLI (the npm global bin directory must also be on PATH)
 - The CLI does not depend on Pi's peer packages, hence `--omit=peer` to avoid installing the host as well; the two installs must be updated separately and kept at the same version (`pi-reopen doctor` reports drift)
-- `pi install` declares a bounded peer range (`>=1.5.0 <2.0.0`); a Pi major upgrade requires a matching pi-reopen release
+- `pi install` declares a minimum peer version (`>=1.5.0`) with no upper bound, so a newer Pi still installs. `pi-reopen doctor` marks untested Pi majors and the extension warns loudly if Pi's extension API changed (instead of silently stopping registration)
 
 **Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load an old `open-all.ts` copy/symlink at the same time as the package; before migrating, check `pi list` and the personal extension directory, disable the old entry only, and do not delete session or auth files.
 

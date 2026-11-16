@@ -464,6 +464,12 @@ test('registry health detects a missing extension record and version drift', asy
   writeExtensionRecord({ version: '0.0.1', schemaVersion: 99 }, f.paths);
   const future = healthChecks(registryHealth({ paths: f.paths, env: { ...f.env } }), 'en');
   assert.equal(future.find((c) => c.name === 'Record schema').ok, false, '扩展写出更新的记录结构必须告警');
+
+  writeExtensionRecord({ version: '1.0.0', schemaVersion: 2, piVersion: '2.1.0' }, f.paths);
+  const untested = healthChecks(registryHealth({ paths: f.paths, env: { ...f.env } }), 'en');
+  const piCheck = untested.find((c) => c.name === 'Pi version');
+  assert.equal(piCheck.ok, true, '更高的 Pi 主版本不阻止安装或运行');
+  assert.match(piCheck.hint, /untested/, '必须明确提示主版本未测试');
 });
 
 test('records with a newer schema are skipped and reported by list', async (t) => {
@@ -532,12 +538,26 @@ test('terminal adapters are resolved by name and unknown ones fail closed', asyn
   assert.match(failed.hint, /wezterm/);
 });
 
-test('peer dependencies stay inside a bounded major range', () => {
+test('peer dependencies require a minimum Pi version without an upper bound', () => {
   const pkg = JSON.parse(fs.readFileSync(join(project, 'package.json'), 'utf8'));
   for (const [name, range] of Object.entries(pkg.peerDependencies)) {
-    assert.notEqual(range, '*', `${name} 必须有上界，避免 Pi 主版本升级时静默失效`);
-    assert.match(range, /<\d+/, `${name} 必须有上界`);
+    assert.match(range, /^>=/, `${name} 必须声明最低支持版本`);
+    assert.doesNotMatch(range, /<\d/, `${name} 不应限制主版本，以便跟随最新 Pi`);
   }
+});
+
+test('detectPiVersion walks up from the Pi entry to the host package', async (t) => {
+  const { detectPiVersion, piMajor } = await import('../src/piversion.js');
+  const f = fixture(t);
+  const pkgDir = join(f.home, 'node_modules', '@earendil-works', 'pi-coding-agent');
+  fs.mkdirSync(join(pkgDir, 'dist'), { recursive: true });
+  fs.writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: '@earendil-works/pi-coding-agent', version: '2.1.0' }));
+  const entry = join(pkgDir, 'dist', 'cli.js');
+  fs.writeFileSync(entry, '');
+  assert.equal(detectPiVersion({ entry }), '2.1.0');
+  assert.equal(detectPiVersion({ entry: join(f.home, 'nothing.js') }), undefined);
+  assert.equal(piMajor('2.1.0'), 2);
+  assert.equal(piMajor(undefined), undefined);
 });
 
 test('doctor reports registry health and explains an empty restore', async (t) => {

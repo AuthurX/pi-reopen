@@ -56,6 +56,7 @@ export default async function (pi: ExtensionAPI) {
 	const preflightMod = await load("preflight.js");
 	const health = await load("health.js");
 	const version = await load("version.js");
+	const piversion = await load("piversion.js");
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
 
@@ -63,6 +64,7 @@ export default async function (pi: ExtensionAPI) {
 	try {
 		health.writeExtensionRecord({
 			version: version.packageVersion(),
+			piVersion: piversion.detectPiVersion(),
 			schemaVersion: members.MEMBER_SCHEMA,
 			platform: platform.runtimePlatform(process.env),
 			distro: process.env.WSL_DISTRO_NAME,
@@ -81,6 +83,14 @@ export default async function (pi: ExtensionAPI) {
 	// 每条用户消息都重新查询会给输入带来可感知的延迟。
 	let cachedIdentity: { processStart?: string; bootId?: string } | undefined;
 	let writeFailureNotified = false;
+	let apiFailureNotified = false;
+
+	/** Pi 扩展 API 变更时显式告警一次，而不是静默停止登记。 */
+	function notifyApiIncompatible(ctx: any): void {
+		if (apiFailureNotified) return;
+		apiFailureNotified = true;
+		ctx.ui?.notify?.(i18n.t(lang, "ext.apiIncompatible"), "warning");
+	}
 
 	function identity(): { processStart?: string; bootId?: string } {
 		if (!cachedIdentity) {
@@ -130,6 +140,12 @@ export default async function (pi: ExtensionAPI) {
 
 	function register(ctx: any): void {
 		if (ctx.mode !== "tui") return;
+		// 能力检测：Pi 主版本升级可能改名/移除这些方法，必须显式告警而不是静默失效。
+		if (typeof ctx.sessionManager?.getSessionFile !== "function"
+			|| typeof ctx.sessionManager?.getSessionId !== "function") {
+			notifyApiIncompatible(ctx);
+			return;
+		}
 		let sessionFile: string | undefined;
 		let sessionId: string | undefined;
 		let sessionName: string | undefined;
@@ -137,9 +153,17 @@ export default async function (pi: ExtensionAPI) {
 			sessionFile = ctx.sessionManager.getSessionFile();
 			if (!sessionFile) return; // 仍未落盘的空窗口，不登记（恢复时跳过）
 			sessionId = ctx.sessionManager.getSessionId();
-			sessionName = ctx.sessionManager.getSessionName();
 		} catch {
-			return; // 宿主 API 变动时宁可不登记，也不要打断消息流程
+			return; // 一次性读取失败：不登记，也不要打断消息流程
+		}
+		if (!sessionId) {
+			notifyApiIncompatible(ctx);
+			return;
+		}
+		try {
+			sessionName = ctx.sessionManager.getSessionName?.();
+		} catch {
+			/* 旧版 Pi 可能没有会话名接口：不影响登记 */
 		}
 		currentSessionId = sessionId;
 		const { processStart, bootId } = identity();

@@ -42,6 +42,7 @@ node .\bin\pi-reopen.js doctor
 - 全局恢复锁与启动声明使用 `O_EXCL` 原子创建，接管前复核记录；8 进程并发测试验证恰好一个赢家。仍不承诺跨版本（旧 CLI 写旧锁目录）的互斥。
 - 恢复前扫描运行中进程的 `--session <文件>`；即使扩展未加载或记录被清空，也不会对同一会话文件开第二个 Pi。
 - 记录带 `platform/distro/user/schemaVersion`；其他平台/发行版的记录会被跳过，比 CLI 更新的记录结构不参与恢复。
+- 扩展不限制 Pi 主版本（peer 只有下限 `>=1.5.0`）：加载后检测 `ctx.sessionManager.getSessionFile/getSessionId`，API 变更时提示一次并停止登记（不会静默失效）；doctor 会把高于已测试主版本的 Pi 标为未测试。
 - 批量恢复超过 5 个先确认；确认窗口 15s + 2s/会话（上限 90s），`--limit`/`--delay` 可进一步限流。
 
 ## 验证

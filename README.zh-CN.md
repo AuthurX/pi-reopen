@@ -86,7 +86,7 @@ pi-reopen doctor
 
 - `pi install` 注册并加载扩展，但不保证 CLI 在普通 Shell 的 PATH 中；`npm install -g` 安装外部 CLI（npm 全局 bin 目录同样需在 PATH）
 - CLI 不依赖 Pi 的 peer 包，因此用 `--omit=peer` 避免额外安装宿主；两处安装需分别更新并保持同一版本（`pi-reopen doctor` 会报告版本不一致）
-- `pi install` 声明了有上界的 peer 范围（`>=1.5.0 <2.0.0`）；Pi 主版本升级需要对应的 pi-reopen 版本
+- `pi install` 只声明最低 peer 版本（`>=1.5.0`），不设上界，因此新版 Pi 仍可安装。`pi-reopen doctor` 会标注未测试的 Pi 主版本；Pi 扩展 API 变更时扩展会显式告警，而不是静默停止登记
 
 **登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的 `open-all.ts` 副本/符号链接；迁移前用 `pi list` 和个人扩展目录核对，只禁用旧入口，不要删除会话或认证文件。
 

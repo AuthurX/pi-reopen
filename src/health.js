@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { resolveLang, t } from "./i18n.js";
 import { MEMBER_SCHEMA, listMembers } from "./members.js";
 import { workspacePaths } from "./paths.js";
+import { TESTED_PI_MAJOR, piMajor } from "./piversion.js";
 import { packageVersion } from "./version.js";
 
 export const EXTENSION_RECORD = "extension.json";
@@ -87,6 +88,19 @@ export function healthChecks(health, lang = resolveLang(health.env)) {
 		t(lang, "health.schemaDetail", { ext: ext?.schemaVersion ?? "-", cli: MEMBER_SCHEMA }),
 		t(lang, "health.schemaHint"),
 	);
+
+	// 只做提示：更高主版本的 Pi 允许安装和运行，doctor 明确标出“未测试”。
+	const piVersion = ext?.piVersion;
+	const major = piMajor(piVersion);
+	const untestedMajor = major !== undefined && major > TESTED_PI_MAJOR;
+	checks.push({
+		name: t(lang, "health.pi"),
+		ok: true,
+		detail: piVersion
+			? t(lang, "health.piDetail", { version: piVersion, tested: TESTED_PI_MAJOR })
+			: t(lang, "health.piUnknown"),
+		hint: untestedMajor ? t(lang, "health.piHint", { major }) : undefined,
+	});
 
 	add(
 		t(lang, "health.members"),
