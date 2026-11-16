@@ -65,6 +65,19 @@ npm publish --access public --tag latest
 
 `prepublishOnly` 会再次运行测试。`--dry-run` 不上传包，也不能证明账户具备真实发布权限。
 
+## 稳定版发布清单
+
+按顺序执行，任一步失败都停下来：
+
+1. `npm test`、`npm run verify-pack`、`python3 test/pty-shutdown.py` 全绿。
+2. 有运行中的 WezTerm 时执行 `npm run test:integration`（真实开标签页 + 标题）。
+3. 按 [PLATFORMS.md](PLATFORMS.md) 的验收清单在 macOS/Windows 实机验证关窗与恢复；未验证的平台差异写进 Release notes。
+4. 确认 `package.json` 版本与 tag 一致（`v1.0.0`），`publishConfig.tag` 为 `latest`。
+5. 推送 `main` 与 `v1.0.0`；CI 在 Linux/macOS/Windows、打包实物、真实 Pi PTY 全部通过后才发布。
+6. 发布后按下方“发布后的安装验证”跑一遍；`pi-reopen doctor` 应同时显示扩展已加载且版本一致。
+
+不要重写或移动已发布的 tag；发现问题时发新版本。
+
 ## 发布后的安装验证
 
 ```bash

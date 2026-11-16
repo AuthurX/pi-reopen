@@ -17,6 +17,7 @@ const REQUIRED = [
 	"package.json",
 	"LICENSE",
 	"README.md",
+	"CHANGELOG.md",
 	"bin/pi-reopen.js",
 	"extensions/open-all.ts",
 	"src/cli.js",
