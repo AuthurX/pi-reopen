@@ -4,6 +4,7 @@ import { binfmtStatus, PERSIST_HINT } from "./binfmt.js";
 import { workspacePaths } from "./paths.js";
 import { currentBootId, isLive } from "./liveness.js";
 import { clearWorkspace } from "./members.js";
+import { forgetMembers, maxAgeMsFromEnv, pruneMembers, resolveMemberIds } from "./prune.js";
 import { exitCodeFor, inspect, label, runRestore, summarize } from "./restore.js";
 import { preflight } from "./preflight.js";
 import { runtimePlatform } from "./platform.js";
@@ -14,6 +15,8 @@ const USAGE = `pi-reopen — 恢复上次的 Pi 终端组合
   pi-reopen                       # 补开上次关闭时仍打开的 Pi（已运行的跳过）
   pi-reopen restore --dry-run     # 只看计划，不开标签页
   pi-reopen list [--wide]         # 查看登记成员与状态（长内容默认按终端宽度截断，--wide 不截断）
+  pi-reopen forget <id|前缀> ...  # 删除指定登记（不删除对话文件）
+  pi-reopen prune [--dry-run]     # 清理过期/无法恢复的记录（默认保留最近 14 天）
   pi-reopen doctor                # 环境检查（平台 / WezTerm / pi / 进程身份）
   pi-reopen clear                 # 清空登记（不删除对话文件）
 
@@ -133,6 +136,38 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 			}
 			write(pre.ok ? "环境就绪。" : "存在未通过项，恢复前需先解决。");
 			return pre.ok ? 0 : 2;
+		}
+		case "forget": {
+			const targets = flags.filter((flag) => !flag.startsWith("-"));
+			if (!targets.length) {
+				write("用法：pi-reopen forget <会话 id 或唯一前缀> [...]");
+				return 1;
+			}
+			const paths = workspacePaths(env);
+			const { ids, missing, ambiguous } = resolveMemberIds(targets, paths);
+			for (const item of ambiguous) {
+				write(`✖ 前缀「${item.input}」有歧义，匹配：${item.candidates.join(", ")}`);
+			}
+			if (ambiguous.length) return 1;
+			const removed = forgetMembers(ids, paths);
+			write(`已移除 ${removed} 条登记${missing.length ? `；未找到：${missing.join(", ")}` : ""}`);
+			return missing.length && !removed ? 1 : 0;
+		}
+		case "prune": {
+			const dryRun = hasFlag("--dry-run");
+			const result = pruneMembers({
+				paths: workspacePaths(env),
+				dryRun,
+				now: Date.now(),
+				maxAgeMs: maxAgeMsFromEnv(env),
+				platform: runtimePlatform(env),
+				distro: env.WSL_DISTRO_NAME,
+			});
+			for (const entry of result.removed) {
+				write(`  − ${entry.name || entry.sessionId}：${entry.cwd ?? ""}`);
+			}
+			write(`${dryRun ? "[dry-run] 将清理" : "已清理"} ${result.removed.length} 条记录${result.kept ? `；保留 ${result.kept} 条` : ""}`);
+			return 0;
 		}
 		case "clear": {
 			const removed = clearWorkspace(workspacePaths(env));

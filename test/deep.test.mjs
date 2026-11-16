@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { workspacePaths } from '../src/paths.js';
-import { isLive, processStart } from '../src/liveness.js';
+import { currentBootId, isLive, processStart } from '../src/liveness.js';
 import { listMembers, writeMember } from '../src/members.js';
 import { CLAIM_TTL_MS, claimSession, readClaim, releaseClaim, sweepClaims } from '../src/claims.js';
 import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
@@ -15,6 +15,7 @@ import { parsePaneId, sanitizeTitle } from '../src/pane.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
 import { EXIT, exitCodeFor, inspect, runRestore, summarize, tabTitle } from '../src/restore.js';
+import { forgetMembers, pruneMembers, resolveMemberIds } from '../src/prune.js';
 import { run as cliRun, displayWidth } from '../src/cli.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
@@ -376,6 +377,66 @@ test('restore sets a tab title from the spawn pane id', async (t) => {
   assert.equal(result.ok, true);
   assert.deepEqual(titles.map((call) => call.title), ['my-session', 'agent']);
   assert.deepEqual(titles.map((call) => call.paneId), [77, 77]);
+});
+
+test('records older than the max age are expired, not restorable', (t) => {
+  const f = fixture(t);
+  const now = Date.now();
+  const old = { ...liveEntry(f.paths, 'old'), pid: undefined, ts: now - 20 * 86_400_000 };
+  const fresh = { ...liveEntry(f.paths, 'fresh'), pid: undefined };
+  writeMember(old, f.paths);
+  writeMember(fresh, f.paths);
+  const { plan } = inspect({ paths: f.paths, owners: new Map(), platform: 'wsl', distro: 'Arch', now });
+  const byId = Object.fromEntries(plan.items.map((i) => [i.entry.sessionId, i.state]));
+  assert.equal(byId['old'], 'expired', '两周前的被动死亡记录不应再自动恢复');
+  assert.equal(byId['fresh'], 'restorable');
+});
+
+test('prune removes expired and unrecoverable records, keeps live and foreign ones', (t) => {
+  const f = fixture(t);
+  const now = Date.now();
+  const expired = { ...liveEntry(f.paths, 'expired'), pid: undefined, ts: now - 20 * 86_400_000 };
+  const goneCwd = { ...liveEntry(f.paths, 'gone-cwd'), pid: undefined, cwd: join(f.home, 'nope') };
+  const goneFile = { ...liveEntry(f.paths, 'gone-file'), pid: undefined };
+  fs.rmSync(goneFile.sessionFile);
+  const live = { ...liveEntry(f.paths, 'live'), pid: process.pid, processStart: processStart(process.pid), bootId: currentBootId() };
+  const foreign = { ...liveEntry(f.paths, 'foreign'), pid: undefined, platform: 'win32' };
+  for (const entry of [expired, goneCwd, goneFile, live, foreign]) writeMember(entry, f.paths);
+  const result = pruneMembers({ paths: f.paths, now, maxAgeMs: 14 * 86_400_000, platform: 'wsl', distro: 'Arch', owners: new Map() });
+  assert.deepEqual(result.removed.map((e) => e.sessionId).sort(), ['expired', 'gone-cwd', 'gone-file']);
+  assert.equal(result.kept, 2);
+  assert.ok(fs.existsSync(join(f.paths.members, 'live.json')), '存活记录不得清理');
+  assert.ok(fs.existsSync(join(f.paths.members, 'foreign.json')), '其他平台的记录不得清理');
+});
+
+test('forget resolves unique prefixes and rejects ambiguous ones', (t) => {
+  const f = fixture(t);
+  for (const id of ['aaa1', 'aaa2', 'bbb3']) writeMember({ ...liveEntry(f.paths, id), pid: undefined }, f.paths);
+  const ambiguous = resolveMemberIds(['aaa'], f.paths);
+  assert.deepEqual(ambiguous.ambiguous.map((item) => item.input), ['aaa']);
+  const unique = resolveMemberIds(['bbb'], f.paths);
+  assert.deepEqual(unique.ids, ['bbb3']);
+  assert.equal(forgetMembers(unique.ids, f.paths), 1);
+  assert.equal(fs.existsSync(join(f.paths.members, 'bbb3.json')), false);
+  assert.deepEqual(resolveMemberIds(['zzz'], f.paths).missing, ['zzz']);
+});
+
+test('cli forget and prune are scriptable', async (t) => {
+  const f = fixture(t);
+  const expired = { ...liveEntry(f.paths, 'old'), pid: undefined, ts: Date.now() - 20 * 86_400_000 };
+  const fresh = { ...liveEntry(f.paths, 'fresh'), pid: undefined };
+  writeMember(expired, f.paths);
+  writeMember(fresh, f.paths);
+  const out = [];
+  const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
+  const env = { ...f.env, PI_CODING_AGENT_DIR: f.paths.agent };
+  assert.equal(await cliRun(['prune', '--dry-run'], { stdout, env }), 0);
+  assert.match(out.join('\n'), /\[dry-run\] 将清理 1 条/);
+  assert.ok(fs.existsSync(join(f.paths.members, 'old.json')), '--dry-run 不得删除');
+  assert.equal(await cliRun(['forget', 'fresh'], { stdout, env }), 0);
+  assert.match(out.join('\n'), /已移除 1 条/);
+  assert.equal(fs.existsSync(join(f.paths.members, 'fresh.json')), false);
+  assert.equal(await cliRun(['forget'], { stdout, env }), 1, '缺少参数应返回用法错误');
 });
 
 test('exit codes separate failures, unverified starts and skipped work', () => {

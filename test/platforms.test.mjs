@@ -169,8 +169,8 @@ test('native restore skips live sessions, launches missing sessions and retains 
   const paths = workspacePaths(env);
   const sessionFile = join(root, 'saved.jsonl');
   fs.writeFileSync(sessionFile, '{}\n');
-  writeMember({ sessionId: 'restore', cwd: root, sessionFile, ts: 1 }, paths);
-  writeMember({ sessionId: 'live', cwd: root, sessionFile, ts: 2,
+  writeMember({ sessionId: 'restore', cwd: root, sessionFile, ts: Date.now() - 1_000 }, paths);
+  writeMember({ sessionId: 'live', cwd: root, sessionFile, ts: Date.now() - 500,
     pid: process.pid, bootId: currentBootId(), processStart: processStart(process.pid) }, paths);
   const calls = [];
   const result = await runRestore({

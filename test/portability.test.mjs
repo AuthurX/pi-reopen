@@ -77,7 +77,7 @@ test('restore uses the supplied environment for records and forwards resolved Pi
   const paths = workspacePaths(f.env);
   const file = join(f.root, 'session.jsonl');
   fs.writeFileSync(file, '{}\n');
-  writeMember({ sessionId: 'portable', cwd: f.root, sessionFile: file, ts: 1 }, paths);
+  writeMember({ sessionId: 'portable', cwd: f.root, sessionFile: file, ts: Date.now() - 1_000 }, paths);
   let script;
   const result = await runRestore({ env: f.env, noWait: true, prober: () => ({ status: 0 }),
     spawner: async (_program, args) => { script = args.at(-1); return { ok: true }; } });

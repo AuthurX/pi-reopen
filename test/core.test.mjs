@@ -88,11 +88,13 @@ test('plan reports missing file/cwd and dedupes path aliases by realpath', (t) =
   const f = fixture(t);
   const good = liveEntry(f.paths, 'good');
   good.pid = undefined; // 被动死亡
-  const ghost = { sessionId: 'ghost', cwd: f.paths.agent, ts: 1 };
-  const noDir = { sessionId: 'noDir', cwd: join(f.home, 'gone'), sessionFile: join(f.paths.sessions, 'x.jsonl'), ts: 2 };
+  // 使用近期时间戳：超过默认 14 天的记录会被判定为 expired，与本用例无关。
+  const base = Date.now() - 60_000;
+  const ghost = { sessionId: 'ghost', cwd: f.paths.agent, ts: base + 1 };
+  const noDir = { sessionId: 'noDir', cwd: join(f.home, 'gone'), sessionFile: join(f.paths.sessions, 'x.jsonl'), ts: base + 2 };
   fs.writeFileSync(noDir.sessionFile, '{}\n');
   const aliasSource = liveEntry(f.paths, 'alias-src', { pid: undefined });
-  const alias = { ...aliasSource, sessionId: 'alias-dup', ts: 3 };
+  const alias = { ...aliasSource, sessionId: 'alias-dup', ts: base + 3 };
   writeMember(good, f.paths);
   writeMember(ghost, f.paths);
   writeMember(noDir, f.paths);
@@ -100,7 +102,7 @@ test('plan reports missing file/cwd and dedupes path aliases by realpath', (t) =
   const linkDir = join(f.home, 'link');
   fs.mkdirSync(linkDir);
   fs.symlinkSync(aliasSource.sessionFile, join(linkDir, 'alias.jsonl'));
-  writeMember({ ...aliasSource, sessionId: 'alias-link', sessionFile: join(linkDir, 'alias.jsonl'), ts: 4 }, f.paths);
+  writeMember({ ...aliasSource, sessionId: 'alias-link', sessionFile: join(linkDir, 'alias.jsonl'), ts: base + 4 }, f.paths);
   const { plan } = inspect({ paths: f.paths });
   const byId = Object.fromEntries(plan.items.map((i) => [i.entry.sessionId, i.state]));
   assert.equal(byId['good'], 'restorable');
@@ -181,7 +183,7 @@ test('runRestore aborts after 3 consecutive spawn failures and releases the lock
   fs.writeFileSync(join(f.home, 'wez.exe'), 'MZ');
   const ids = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6'];
   for (const [i, id] of ids.entries()) {
-    writeMember({ ...liveEntry(f.paths, id), ...(await deadIdentity()), ts: 1000 + i }, f.paths);
+    writeMember({ ...liveEntry(f.paths, id), ...(await deadIdentity()), ts: Date.now() - 60_000 + i }, f.paths);
   }
   const order = [];
   const result = await runRestore({

@@ -6,6 +6,7 @@ import { openTab } from "./spawn.js";
 import { workspacePaths } from "./paths.js";
 import { basename } from "node:path";
 import { scanSessionOwners } from "./inuse.js";
+import { maxAgeMsFromEnv } from "./prune.js";
 import { parsePaneId, setTabTitle } from "./pane.js";
 import { runtimePlatform } from "./platform.js";
 import { currentBootId } from "./liveness.js";
@@ -14,6 +15,7 @@ import { waitForMembers } from "./verify.js";
 const STATE_LABEL = {
 	live: "运行中",
 	claimed: "启动占用中",
+	expired: "已过期",
 	"wrong-platform": "其他平台/发行版",
 	"missing-cwd": "工作目录缺失",
 	"missing-file": "会话文件缺失",
@@ -32,7 +34,7 @@ export function tabTitle(entry) {
 }
 
 /** 只读：列出全部成员与状态（list / dry-run 共用）。 */
-export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro } = {}) {
+export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs } = {}) {
 	const members = listMembers(paths);
 	const plan = buildRestorePlan({
 		members,
@@ -42,6 +44,8 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 		owners: owners ?? scanSessionOwners({ env }),
 		platform: platform ?? runtimePlatform(env),
 		distro: distro ?? env.WSL_DISTRO_NAME,
+		now,
+		maxAgeMs: maxAgeMs ?? maxAgeMsFromEnv(env),
 	});
 	return { members, plan };
 }

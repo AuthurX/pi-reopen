@@ -33,6 +33,7 @@ function dedupeKey(sessionFile) {
  * 生成恢复计划。状态语义：
  * live        进程仍存活，跳过（也自然排除了发起恢复的当前会话）
  * claimed     其他恢复进程正在启动它，跳过
+ * expired     记录早于 maxAgeMs（默认 14 天），不再自动恢复，可用 prune 清理
  * wrong-platform 记录来自其他系统/发行版（共用 agent 目录时），跳过并报告
  * missing-cwd 工作目录不存在，跳过并报告
  * missing-file 会话文件不存在（未落盘/已删除），跳过并报告
@@ -49,6 +50,8 @@ export function buildRestorePlan({
 	owners,
 	platform = runtimePlatform(),
 	distro = process.env.WSL_DISTRO_NAME,
+	now = Date.now(),
+	maxAgeMs,
 }) {
 	const seen = new Set();
 	const items = [];
@@ -78,7 +81,12 @@ export function buildRestorePlan({
 					state = "duplicate";
 				} else {
 					seen.add(key);
-					if (owners?.has(normalizeSessionPath(sessionFile))) state = "in-use";
+					if (owners?.has(normalizeSessionPath(sessionFile))) {
+						state = "in-use";
+					} else if (Number.isFinite(maxAgeMs) && now - (entry.ts ?? 0) > maxAgeMs) {
+						// 过期判定放在最后：缺文件/缺目录比“太久没动”更具体、更可操作。
+						state = "expired";
+					}
 				}
 			}
 		}
