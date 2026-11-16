@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import { binfmtStatus, PERSIST_HINT } from "./binfmt.js";
 import { workspacePaths } from "./paths.js";
@@ -29,7 +30,8 @@ restore 选项：
   --json               输出机器可读的 JSON（便于脚本消费）
   --only <模式>        只恢复匹配的会话；子串或 * 通配符，可重复/逗号分隔
   --limit <N>          本次最多开 N 个标签页（其余保留待下次）
-  --yes                跳过批量确认提示
+  --delay <ms>         每个标签页之间等待的毫秒数（缓解批量启动压力）
+  --yes                跳过批量确认提示（超过 5 个时默认会询问）
 
 每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
 默认在全部请求发出后等待各 pi 启动并登记再报告，--no-wait 跳过该等待。
@@ -166,7 +168,19 @@ function listLines({ plan }, { termWidth = 80 } = {}) {
 	return [render(["状态", "会话", "路径", "时间"]), ...rows.map(render)];
 }
 
-export async function run(argv = [], { stdout = process.stdout, env = process.env } = {}) {
+/** 交互确认；非 TTY（管道、CI）不阻塞，保持可脚本化。 */
+export async function promptYesNo(question, { input = process.stdin, output = process.stdout } = {}) {
+	if (!input?.isTTY) return true;
+	const rl = createInterface({ input, output });
+	try {
+		const answer = (await rl.question(question)).trim().toLowerCase();
+		return answer === "y" || answer === "yes" || answer === "是";
+	} finally {
+		rl.close();
+	}
+}
+
+export async function run(argv = [], { stdout = process.stdout, env = process.env, stdin = process.stdin, confirm: confirmOverride } = {}) {
 	const { command, flags } = normalizeArgv(argv);
 	const hasFlag = (name) => flags.includes(name);
 	const write = (line) => {
@@ -194,12 +208,27 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 		case "restore": {
 			const limitRaw = Number(flagValue(flags, "--limit"));
 			const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : undefined;
+			const delayRaw = Number(flagValue(flags, "--delay"));
+			const delayMs = Number.isFinite(delayRaw) && delayRaw > 0 ? delayRaw : 0;
+			const thresholdRaw = Number(env.PI_WORKSPACE_CONFIRM_THRESHOLD);
+			const yes = hasFlag("--yes") || hasFlag("-y");
+			const confirm = yes || hasFlag("--dry-run") || hasFlag("--json")
+				? undefined
+				: confirmOverride ?? (async ({ targets }) => {
+					const list = targets
+						.map((item) => `  ${item.entry.name || item.entry.sessionId}  ${item.entry.cwd}`)
+						.join("\n");
+					return promptYesNo(`将打开 ${targets.length} 个标签页：\n${list}\n继续？[y/N] `, { input: stdin, output: stdout });
+				});
 			const result = await runRestore({
 				env,
 				dryRun: hasFlag("--dry-run"),
 				noWait: hasFlag("--no-wait"),
 				only: collectOnly(flags),
 				limit,
+				delayMs,
+				confirm,
+				confirmThreshold: Number.isFinite(thresholdRaw) && thresholdRaw >= 0 ? thresholdRaw : undefined,
 			});
 			const code = exitCodeFor(result);
 			if (hasFlag("--json")) {

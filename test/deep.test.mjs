@@ -14,7 +14,7 @@ import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { parsePaneId, sanitizeTitle } from '../src/pane.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { EXIT, exitCodeFor, inspect, runRestore, summarize, tabTitle } from '../src/restore.js';
+import { EXIT, defaultWaitTimeoutMs, exitCodeFor, inspect, runRestore, summarize, tabTitle } from '../src/restore.js';
 import { forgetMembers, pruneMembers, resolveMemberIds } from '../src/prune.js';
 import { collectOnly, displayWidth, jsonPayload, normalizeArgv, run as cliRun } from '../src/cli.js';
 
@@ -377,6 +377,64 @@ test('restore sets a tab title from the spawn pane id', async (t) => {
   assert.equal(result.ok, true);
   assert.deepEqual(titles.map((call) => call.title), ['my-session', 'agent']);
   assert.deepEqual(titles.map((call) => call.paneId), [77, 77]);
+});
+
+test('restore honors --limit, --delay and batch confirmation', async (t) => {
+  const f = fixture(t);
+  for (const id of ['a1', 'b2', 'c3']) {
+    writeMember({ ...liveEntry(f.paths, id), ...(await deadIdentity()) }, f.paths);
+  }
+  fs.writeFileSync(join(f.home, 'wez.exe'), 'MZ');
+  const spawned = [];
+  const sleeps = [];
+  const base = {
+    env: { HOME: f.home, PI_WORKSPACE_WEZTERM: join(f.home, 'wez.exe') },
+    platform: 'linux',
+    paths: f.paths,
+    noWait: true,
+    owners: new Map(),
+    prober: () => ({ status: 0, stdout: 'wezterm 1.0' }),
+    piProber: () => ({ status: 0, stdout: '/usr/bin/pi' }),
+    spawner: async (_program, args) => { spawned.push(args); return { ok: true, stdout: '1' }; },
+    titleSetter: () => true,
+    sleeper: async (ms) => { sleeps.push(ms); },
+  };
+  const limited = await runRestore({ ...base, limit: 2, delayMs: 100 });
+  assert.equal(spawned.length, 2, '--limit 必须限制本次开出的标签页数量');
+  assert.deepEqual(sleeps, [100], '--delay 只在标签页之间等待');
+  assert.equal(limited.plan.count('deferred'), 1);
+  assert.equal(exitCodeFor(limited), EXIT.skipped);
+  assert.match(summarize(limited).join('\n'), /超出 --limit/);
+
+  // 上一轮留下的启动声明会（正确地）让这些会话变成 claimed；模拟新 Pi 已登记后清除。
+  for (const id of ['a1', 'b2', 'c3']) releaseClaim(id, f.paths);
+  spawned.length = 0;
+  let asked;
+  const cancelled = await runRestore({
+    ...base,
+    confirm: async ({ targets }) => { asked = targets.length; return false; },
+    confirmThreshold: 2,
+  });
+  assert.equal(asked, 3, '确认回调必须收到本次要打开的条目');
+  assert.equal(cancelled.stage, 'cancelled');
+  assert.equal(spawned.length, 0, '用户取消后不得开标签页');
+  assert.equal(exitCodeFor(cancelled), EXIT.ok, '用户主动取消不算失败');
+  assert.match(summarize(cancelled).join('\n'), /已取消/);
+
+  let calls = 0;
+  const below = await runRestore({
+    ...base,
+    confirm: async () => { calls++; return false; },
+    confirmThreshold: 3,
+  });
+  assert.equal(calls, 0, '不超过阈值时不应打断用户');
+  assert.equal(below.ok, true);
+});
+
+test('default verification window scales with the batch size', () => {
+  assert.equal(defaultWaitTimeoutMs(0), 15_000);
+  assert.equal(defaultWaitTimeoutMs(10), 35_000);
+  assert.equal(defaultWaitTimeoutMs(100), 90_000, '窗口有上限，避免无限等待');
 });
 
 test('CLI entry conventions: --help and --version succeed instead of printing usage', async () => {

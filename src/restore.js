@@ -17,6 +17,7 @@ const STATE_LABEL = {
 	claimed: "启动占用中",
 	expired: "已过期",
 	filtered: "未匹配 --only",
+	deferred: "本次未处理（超出 --limit）",
 	"wrong-platform": "其他平台/发行版",
 	"missing-cwd": "工作目录缺失",
 	"missing-file": "会话文件缺失",
@@ -67,6 +68,17 @@ export async function setTitle({ wezterm, stdout, entry, env = process.env, titl
 /** 连续请求失败达此值时提前停止（WezTerm 多半已卡死，继续只会堆积更多超时等待）。 */
 const MAX_CONSECUTIVE_FAILURES = 3;
 
+/** 批量恢复默认超过这个数量就先确认，避免无提示地开出一屏标签页。 */
+export const CONFIRM_THRESHOLD = 5;
+
+/**
+ * 默认确认等待窗口：按批大小放大。
+ * 固定 15s 对 20+ 个 WSL 会话不够，会让大量正常启动被误报成“超时未确认”。
+ */
+export function defaultWaitTimeoutMs(count) {
+	return Math.min(90_000, 15_000 + 2_000 * Math.max(0, count));
+}
+
 /**
  * 恢复编排：预检 → 计划 → 全局恢复锁 → 声明启动占用 → 逐个发开标签页请求 → 等待登记确认。
  * 结果如实区分：requested（WezTerm 接受请求）与 verified（Pi 已启动并登记）。
@@ -77,8 +89,13 @@ export async function runRestore({
 	paths = workspacePaths(env),
 	dryRun = false,
 	noWait = false,
-	waitTimeoutMs = 15_000,
+	waitTimeoutMs,
 	spawnTimeoutMs,
+	limit,
+	delayMs = 0,
+	confirm,
+	confirmThreshold = CONFIRM_THRESHOLD,
+	sleeper = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 	spawner,
 	prober,
 	piProber,
@@ -95,6 +112,14 @@ export async function runRestore({
 	if (dryRun) {
 		return { ok: true, stage: "dry-run", plan };
 	}
+	const restorable = plan.restorable;
+	const targets = Number.isFinite(limit) && limit > 0 ? restorable.slice(0, limit) : restorable;
+	const deferred = restorable.slice(targets.length);
+	// 超出 --limit 的条目在计划里也改成 deferred，避免汇总里仍显示“待恢复”。
+	for (const item of deferred) item.state = "deferred";
+	if (confirm && targets.length > confirmThreshold && !(await confirm({ plan, targets }))) {
+		return { ok: false, stage: "cancelled", plan };
+	}
 	const lock = acquireRestoreLock(paths, process.pid);
 	if (lock.locked) {
 		return { ok: false, stage: "locked", holder: lock.holder, plan };
@@ -103,10 +128,11 @@ export async function runRestore({
 		const baseline = Date.now();
 		// 计划阶段就已被其他恢复进程占用的条目也要如实出现在结果里，
 		// 否则“全部被占用”会被误报成“没有待恢复的会话”。
-		const results = plan.items.filter((item) => item.state === "claimed");
+		const results = plan.items.filter((item) => item.state === "claimed" || item.state === "deferred");
 		let consecutiveFailures = 0;
 		let aborted = false;
-		for (const item of plan.restorable) {
+		for (const [index, item] of targets.entries()) {
+			if (index > 0 && delayMs > 0) await sleeper(delayMs);
 			if (aborted) {
 				results.push({ ...item, requested: false, aborted: true });
 				continue;
@@ -142,7 +168,11 @@ export async function runRestore({
 		const requestedIds = results.filter((r) => r.requested).map((r) => r.entry.sessionId);
 		const verification = noWait || requestedIds.length === 0
 			? null
-			: await waitForMembers(requestedIds, { paths, timeoutMs: waitTimeoutMs, baseline });
+			: await waitForMembers(requestedIds, {
+				paths,
+				timeoutMs: waitTimeoutMs ?? defaultWaitTimeoutMs(requestedIds.length),
+				baseline,
+			});
 		const ok = results.every((r) => r.requested);
 		return { ok, stage: "done", plan, results, aborted, verification };
 	} finally {
@@ -165,10 +195,12 @@ export function exitCodeFor(result) {
 	if (result.stage === "preflight") return EXIT.preflight;
 	if (result.stage === "locked") return EXIT.skipped;
 	if (result.stage === "dry-run") return EXIT.ok;
+	if (result.stage === "cancelled") return EXIT.ok; // 用户主动取消不算失败
 	const results = result.results ?? [];
-	if (results.some((item) => item.state !== "claimed" && !item.aborted && !item.requested)) return EXIT.failed;
+	const skippedStates = new Set(["claimed", "deferred"]);
+	if (results.some((item) => !skippedStates.has(item.state) && !item.aborted && !item.requested)) return EXIT.failed;
 	if (result.verification?.unverified?.length) return EXIT.unverified;
-	if (results.some((item) => item.state === "claimed" || item.aborted)) return EXIT.skipped;
+	if (results.some((item) => skippedStates.has(item.state) || item.aborted)) return EXIT.skipped;
 	return EXIT.ok;
 }
 
@@ -181,6 +213,10 @@ export function summarize(result) {
 			lines.push(`  ✖ ${check.name}：${check.detail}`);
 			if (check.hint) lines.push(`    → ${check.hint}`);
 		}
+		return lines;
+	}
+	if (result.stage === "cancelled") {
+		lines.push("已取消，未打开任何标签页。");
 		return lines;
 	}
 	if (result.stage === "locked") {
@@ -205,6 +241,8 @@ export function summarize(result) {
 		const title = r.entry.name || r.entry.sessionId;
 		if (r.state === "claimed") {
 			lines.push(`  ⏭ ${title}：其他恢复进程正在启动，跳过`);
+		} else if (r.state === "deferred") {
+			lines.push(`  ⏭ ${title}：本次未处理（超出 --limit，下次可继续）`);
 		} else if (r.aborted) {
 			lines.push(`  ⏭ ${title}：未尝试（WezTerm 请求连续失败，提前停止）`);
 		} else if (!r.requested) {
