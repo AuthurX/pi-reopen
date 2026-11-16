@@ -1,4 +1,4 @@
-import { acquireRestoreLock, claimSession, releaseRestoreLock, sweepClaims } from "./claims.js";
+import { acquireRestoreLock, activeClaim, claimSession, releaseRestoreLock, sweepClaims } from "./claims.js";
 import { listMembers } from "./members.js";
 import { buildRestorePlan } from "./plan.js";
 import { preflight } from "./preflight.js";
@@ -37,7 +37,7 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 	const plan = buildRestorePlan({
 		members,
 		paths,
-		claimFn: () => false,
+		claimFn: (sessionId) => !!activeClaim(sessionId, paths),
 		bootId: currentBootId(),
 		owners: owners ?? scanSessionOwners({ env }),
 		platform: platform ?? runtimePlatform(env),
@@ -94,7 +94,9 @@ export async function runRestore({
 	}
 	try {
 		const baseline = Date.now();
-		const results = [];
+		// 计划阶段就已被其他恢复进程占用的条目也要如实出现在结果里，
+		// 否则“全部被占用”会被误报成“没有待恢复的会话”。
+		const results = plan.items.filter((item) => item.state === "claimed");
 		let consecutiveFailures = 0;
 		let aborted = false;
 		for (const item of plan.restorable) {
@@ -207,10 +209,11 @@ export function summarize(result) {
 		}
 	}
 	const skippedText = skipped ? `；跳过：${skipped}` : "";
-	if (!result.results.length) {
+	const processed = result.results.filter((r) => r.requested || r.requestError !== undefined || r.aborted).length;
+	if (!processed) {
 		lines.push(`没有待恢复的会话${skippedText}`);
 	} else {
-		lines.push(`已处理 ${result.results.length} 个${skippedText}${result.aborted ? "（已提前停止）" : ""}`);
+		lines.push(`已处理 ${processed} 个${skippedText}${result.aborted ? "（已提前停止）" : ""}`);
 	}
 	return lines;
 }

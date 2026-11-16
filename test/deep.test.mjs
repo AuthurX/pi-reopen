@@ -8,7 +8,7 @@ import test from 'node:test';
 import { workspacePaths } from '../src/paths.js';
 import { isLive, processStart } from '../src/liveness.js';
 import { listMembers, writeMember } from '../src/members.js';
-import { CLAIM_TTL_MS, claimSession, readClaim, sweepClaims } from '../src/claims.js';
+import { CLAIM_TTL_MS, claimSession, readClaim, releaseClaim, sweepClaims } from '../src/claims.js';
 import { buildRestorePlan, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { parsePaneId, sanitizeTitle } from '../src/pane.js';
@@ -114,6 +114,24 @@ test('sweepClaims removes expired and dead-holder claims, keeps fresh live and c
   assert.equal(readClaim('expired', f.paths), undefined, '过期 → 删除');
   assert.equal(readClaim('deadholder', f.paths), undefined, '持有者已死 → 删除');
   assert.ok(fs.existsSync(join(f.paths.claims, 'corrupt.json')), '损坏声明保留，待 TTL 后接管');
+});
+
+test('list shows a session that another live restore process is starting', async (t) => {
+  const f = fixture(t);
+  const entry = { ...liveEntry(f.paths, 'starting'), ...(await deadIdentity()) };
+  writeMember(entry, f.paths);
+  const holder = spawn('sleep', ['30'], { stdio: 'ignore' });
+  await new Promise((resolve) => holder.once('spawn', resolve));
+  t.after(() => { try { holder.kill('SIGKILL'); } catch {} });
+  claimSession('starting', holder.pid, f.paths);
+  const { plan } = inspect({ paths: f.paths, owners: new Map() });
+  assert.equal(plan.items[0].state, 'claimed', 'list 必须能显示“启动占用中”，不能只显示待恢复');
+  const out = [];
+  const stdout = { write: (line) => out.push(line), columns: 200, on: () => {} };
+  await cliRun(['list'], { stdout, env: { ...f.env, PI_CODING_AGENT_DIR: f.paths.agent } });
+  assert.match(out.join('\n'), /启动占用中/);
+  releaseClaim('starting', f.paths);
+  holder.kill('SIGKILL');
 });
 
 test('plan marks sessions claimed by another restore as claimed', async (t) => {
