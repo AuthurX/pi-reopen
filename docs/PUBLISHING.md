@@ -13,8 +13,8 @@ Pi 没有要求把源码上传到单独的 Pi 注册中心。分发有两条路�
 
 - **包名**：已确定为 `@ellieyujin/pi-reopen`，使用 npm 账户 `ellieyujin` 发布。无 scope 的 `pi-workspace` 属于其他作者，不是本项目。CLI 命令为 `pi-reopen`，与他人的 `pi-workspace` CLI 不冲突。
 - **许可证**：已选择 [MIT](../LICENSE)，版权人为 `ellieyujin`；`package.json.license` 已声明为 `MIT`，发布包须包含完整 LICENSE。
-- **版本**：`0.3.0` 正式版，`publishConfig.tag` 为 `latest`。已发布的同名同版本不能重复发布。
-- **功能验收**：0.2.0 已完成 WSL 恢复验收；0.3.0 新增平台必须通过三平台 CI，macOS/Windows 真实 WezTerm 关窗与恢复仍待实机验收。维护者选择正式发布，但这不代表完整 GUI 验收已完成。启动声明不是跨进程原子锁，不能宣称并发恢复绝无重复。
+- **版本**：`1.0.0` 稳定版，`publishConfig.tag` 为 `latest`。已发布的同名同版本不能重复发布。
+- **功能验收**：WSL 恢复已完成实机验收；三平台 CI 通过，打包实物与真实 Pi PTY 生命周期由 CI 覆盖。macOS/Windows 真实 WezTerm 关窗与恢复仍待实机验收。恢复锁与启动声明已改为原子创建，但跨版本（旧 CLI）并发不承诺互斥。
 - **工作树**：核对所有未提交修改（含原有修改），不要把未审查内容一起提交。本文不自动提交、推送或发布。
 
 ## 本地检查
@@ -23,11 +23,13 @@ Pi 没有要求把源码上传到单独的 Pi 注册中心。分发有两条路�
 
 ```bash
 npm test
-python test/pty-shutdown.py
-npm pack --dry-run
+npm run verify-pack
+python3 test/pty-shutdown.py
+# 有运行中的 WezTerm 时，再跑真实集成测试
+npm run test:integration
 ```
 
-PTY 测试需要已安装 Pi；它只用临时配置测试信号退出与主动退出，不调用模型、不打开 WezTerm 标签页。检查 tarball 列表应包含 `extensions/`、`src/`、`bin/`、README、LICENSE、发布文档，不包含认证、个人会话、`.env`、测试临时文件或 `node_modules`。
+PTY 测试需要已安装 Pi；它只用临时配置测试信号退出与主动退出，不调用模型、不打开 WezTerm 标签页。`verify-pack` 会断言 tarball 包含 `extensions/`、`src/`、`bin/`、README、LICENSE、发布文档，且不包含认证、个人会话、`.env`、测试临时文件或 `node_modules`，随后解压并运行解压后的 CLI（`--version`、`list`、`restore --dry-run`、预检失败退出码 2、未知命令退出码 1）。
 
 打包实物也应在临时目录解压后测试 CLI 和 Pi 扩展，且不设置 `PI_REOPEN_SRC`，避免本机源码兜底掩盖漏打包。
 

@@ -7,8 +7,8 @@
 - 项目目录：使用者可将仓库克隆到任意目录。
 - npm 包名：`@ellieyujin/pi-reopen`；许可证为 MIT，版权人为 `ellieyujin`。无 scope 的 `pi-workspace` 属于其他作者，见 `PUBLISHING.md`。
 - 外部入口：`pi-reopen`（无参数即恢复，`restore` 为显式写法；已实现，端到端验收仍待完成）。
-- 第一阶段环境：Windows WezTerm + Arch WSL。
-- 后续平台扩展：Linux / macOS / Windows 原生 + 本机 WezTerm，保留 WSL。恢复前先打开 WezTerm；平台依赖、验证状态与限制见 [PLATFORMS.md](PLATFORMS.md)。
+- 支持环境：Linux / macOS / Windows 原生 + 本机 WezTerm，以及 WSL + Windows WezTerm。恢复前先打开 WezTerm；平台依赖、验证状态与限制见 [PLATFORMS.md](PLATFORMS.md)。
+- 终端适配器：目前只有 WezTerm；接口见 [TERMINALS.md](TERMINALS.md)。
 
 ## 已确认的恢复规则
 
@@ -40,7 +40,7 @@
 1. **触发方式**：第一版仅手动执行恢复命令；“打开终端自动恢复”留作后续可选功能，不在 P0。
 2. **空窗口**：从未发送过消息的 Pi 窗口没有对话文件，恢复时跳过，并在结果中提示跳过数量；不重建空终端。
 3. **旧记录迁移**：忽略旧原型产生的历史格式登记，不自动删除；新版本按新规则从零记录。提供 `clear` 方式手动清理，对话文件不受影响。
-4. **命令与入口**：外部命令为 `pi-reopen`（无参数即恢复；`list`、`doctor`、`clear` 均已实现）；Pi 内 `/reopen`（含 `recent`、`clear`）与 `Ctrl+Shift+O`，命名与外部 CLI 对齐，共用同一恢复逻辑。
+4. **命令与入口**：外部命令为 `pi-reopen`（无参数即恢复；`list`、`forget`、`prune`、`doctor`、`clear`、`--help`、`--version` 均已实现）；Pi 内 `/reopen`（含 `recent`、`clear`）与 `Ctrl+Shift+O`，命名与外部 CLI 对齐，共用同一恢复逻辑。
 5. **标签页标题**：优先使用会话名（`/name` 设置过），否则使用工作目录的文件夹名。
 
 以上共 14 条规则构成需求基线；后续变更需更新本文档并同步测试。
@@ -65,8 +65,11 @@
 
 ### P1：辅助能力
 
-- `list` / `--dry-run`：恢复前只读预览计划。
-- `doctor`：检测运行环境并输出可操作的诊断。
+- `list` / `--dry-run` / `--json`：恢复前只读预览计划，支持脚本消费。
+- `doctor`：检测运行环境与登记健康度（扩展是否加载、版本一致性、记录结构）并输出可操作的诊断。
+- `forget` / `prune`：清理单条或过期/不可恢复的记录，不触碰对话文件。
+- 批量保护：超过 5 个待恢复会话先确认，`--limit`/`--delay` 限制批量规模。
+- 输出国际化：中文/英文，默认跟随 locale（`PI_REOPEN_LANG`）。
 - 手动补选近期对话：仅作旧登记丢失时的补救，不当作准确的上次工作区；须经用户确认。
 - 打开终端自动恢复（Shell 钩子）：作为明确开启的可选项，不是默认行为。
 
@@ -95,6 +98,9 @@
 - 六个中已有两个运行，只补其余四个；连续执行、并发执行均不重复。
 - 同目录两个不同对话均恢复；同一个文件路径的别名正确去重。
 - WSL 重启后旧 PID 不会误判为运行中。
+- 扩展未加载（没有登记）时，恢复不会对已在其他窗口打开的同一会话文件再开一个 Pi。
+- 关闭终端但未收到 SIGHUP/SIGTERM 时，pane 消失仍按被动死亡保留记录。
+- 共用 agent 目录时，来自其他平台/发行版的记录不会被错误启动。
 - 缺失/未落盘文件有明确报告，不创建空对话冒充恢复成功。
 - WSLInterop 缺失时输出诊断，无未捕获的 ENOEXEC，无虚假成功。
 - WezTerm 请求成功但 Pi 启动失败时仍能诊断。

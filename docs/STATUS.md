@@ -1,6 +1,32 @@
 # 本机实现审查
 
-**当前结论：0.2.0 正式版已发布（2026-11-13）。** `npm test` 55/55 通过，真实 WezTerm 恢复验收通过（见下）。下方旧轮次记录不代表当前完成状态。
+**当前结论：1.0.0 稳定版准备完成（2026-11-16）。** `npm test` 109/109 通过（集成测试默认跳过），`npm run verify-pack` 通过，真实 Pi PTY 3/3 通过。真实 WezTerm 单会话恢复验收在 0.2.0 完成；1.0.0 新增的关闭判定、标题、批量保护路径仍需按 PLATFORMS.md 的清单实机验收。下方按时间倒序记录各轮次；旧轮次结论不代表当前状态。
+
+## 1.0.0 稳定版准备（2026-11-16）
+
+按产品评审的 19 项问题逐项修复，每项一个提交：
+
+- **关闭判定**：新增 `src/pane.js`，无信号 quit 时用 `wezterm cli list` 判断本 pane 是否仍存在；pane 消失按被动死亡保留记录。
+- **并发安全**：`restore.lock` 与启动声明改为 `O_EXCL` 原子创建，接管前复核记录；新增 8 进程真实竞争测试（恰好 1 个赢家）。
+- **双写防护**：`src/inuse.js` 扫描运行中进程的 `--session`，plan 新增 `in-use` 状态。
+- **跨平台**：记录新增 `platform/distro/user/schemaVersion`，plan 跳过 `wrong-platform`；旧记录（无 platform）继续可恢复。
+- **退出码**：`EXIT` 契约 0/1/2/3/4，用户取消返回 0；CLI 与 README 对齐。
+- **标签页标题**：解析 spawn 返回的 pane id，调用 `wezterm cli set-tab-title`（会话名优先，否则目录名）。
+- **list**：`claimFn` 改用 `activeClaim`，可显示“启动占用中”；`--json` 输出。
+- **/reopen recent**：读取会话头+尾部得到 `session_info` 名称；校验 cwd、扫描占用、共用全局锁、`requirePid` 确认、未确认释放声明。
+- **记录生命周期**：新增 `forget`/`prune`，超过 14 天的记录为 `expired`；prune 不清理存活/占用/其他平台记录。
+- **CLI 约定**：`--help`/`--version` 返回 0，裸 flag 归一化为 restore；`--only`/`--limit`/`--delay`/`--yes`/`--json`。
+- **批量安全**：超过 5 个先确认；确认窗口 15s + 2s/会话（上限 90s）。
+- **i18n**：`src/i18n.js` 中英词表，CLI/doctor/扩展提示全部本地化，默认跟随 locale。
+- **doctor**：新增登记目录、扩展自述、版本一致性、记录结构检查；空登记给出 `/reload` 提示。
+- **扩展健壮性**：缓存进程身份、写失败单次提示、`session_info_changed` 刷新名称、宿主 API 读取包 try/catch。
+- **版本护栏**：peerDependencies 收紧为 `>=1.5.0 <2.0.0`；更高 schema 的记录跳过并在 list/doctor 报告。
+- **终端适配器**：`src/terminals/` + `docs/TERMINALS.md`，未知适配器预检失败。
+- **命名统一**：数据目录 `~/.pi/agent/pi-reopen`，变量 `PI_REOPEN_*`；旧目录/旧变量继续兼容。
+- **CI**：新增 `npm run verify-pack`、真实 Pi PTY 任务、`PI_REOPEN_INTEGRATION=1` 真实 WezTerm 测试；发布流程先校验 tarball。
+- **文档**：README 双语重写、新增 CHANGELOG、更新 PLATFORMS/REQUIREMENTS/PUBLISHING。
+
+**仍需实机验收**：macOS/Windows 的真实关窗与恢复、快捷键与大量会话性能；`kill -9` 仍按被动死亡处理（已接受误差）。
 
 ## 0.2.0 正式版验收与发布（2026-11-13）
 

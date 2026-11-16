@@ -38,8 +38,11 @@ node .\bin\pi-reopen.js doctor
 - 所有平台继续区分“请求被接受”与“Pi 登记确认”。`--no-wait` 不代表启动已确认。
 - macOS `ps lstart` 精度为秒，低于 Linux/Windows 的进程创建时间精度；同一秒内极端 PID 重用仍有误判可能。
 - Windows 的进程查询会启动 PowerShell，速度比 Linux 读取 procfs 慢；大量会话需要额外性能验收。
-- 关闭事件由 Pi 与终端/ConPTY 共同决定。SIGHUP/SIGTERM 保留记录，主动 `/quit` 删除记录，强杀后残留记录用于恢复；Windows/macOS 的真实关窗行为仍需实机验证。
-- 本轮沿用原有文件锁/声明实现，未重写锁算法；现有“读取后替换”的全局锁不是原子 compare-and-set，不承诺极端同时启动时绝无竞态。
+- 关闭事件由 Pi 与终端/ConPTY 共同决定。SIGHUP/SIGTERM 保留记录，主动 `/quit` 删除记录；没有受跟踪信号时再查询 `WEZTERM_PANE` 是否还存在（pane 消失=关窗，保留记录）。Windows/macOS 的真实关窗行为仍需实机验证。
+- 全局恢复锁与启动声明使用 `O_EXCL` 原子创建，接管前复核记录；8 进程并发测试验证恰好一个赢家。仍不承诺跨版本（旧 CLI 写旧锁目录）的互斥。
+- 恢复前扫描运行中进程的 `--session <文件>`；即使扩展未加载或记录被清空，也不会对同一会话文件开第二个 Pi。
+- 记录带 `platform/distro/user/schemaVersion`；其他平台/发行版的记录会被跳过，比 CLI 更新的记录结构不参与恢复。
+- 批量恢复超过 5 个先确认；确认窗口 15s + 2s/会话（上限 90s），`--limit`/`--delay` 可进一步限流。
 
 ## 验证
 
