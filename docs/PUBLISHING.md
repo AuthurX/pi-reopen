@@ -29,7 +29,7 @@ npm pack --dry-run
 
 PTY 测试需要已安装 Pi；它只用临时配置测试信号退出与主动退出，不调用模型、不打开 WezTerm 标签页。检查 tarball 列表应包含 `extensions/`、`src/`、`bin/`、README、LICENSE、发布文档，不包含认证、个人会话、`.env`、测试临时文件或 `node_modules`。
 
-打包实物也应在临时目录解压后测试 CLI 和 Pi 扩展，且不设置 `PI_WORKSPACE_SRC`，避免本机源码兜底掩盖漏打包。
+打包实物也应在临时目录解压后测试 CLI 和 Pi 扩展，且不设置 `PI_REOPEN_SRC`，避免本机源码兜底掩盖漏打包。
 
 ## GitHub 自动发布（当前使用）
 

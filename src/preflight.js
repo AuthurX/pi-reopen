@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { BINFMT_FIX_COMMAND } from "./binfmt.js";
+import { envCompat } from "./env.js";
 import { discoverWezterm } from "./discover.js";
 import { resolveLang, t } from "./i18n.js";
 import { getTerminal, terminalId } from "./terminals/index.js";
@@ -34,7 +35,7 @@ export function preflight({ env = process.env, platform = runtimePlatform(env), 
 	const identity = identityProber ? identityProber() : { bootId: currentBootId(), processStart: processStart(process.pid) };
 	add(t(lang, "pf.identity"), !!identity?.bootId && !!identity?.processStart, identity?.bootId || t(lang, "pf.identityUnavailable"), t(lang, "pf.identityHint"));
 
-	const explicit = wezterm ?? env.PI_WORKSPACE_WEZTERM;
+	const explicit = wezterm ?? envCompat(env, "PI_REOPEN_WEZTERM");
 	let found;
 	if (explicit) {
 		if (isFile(explicit)) {
@@ -94,7 +95,7 @@ export function preflight({ env = process.env, platform = runtimePlatform(env), 
 		return { ok: checks.every((c) => c.ok), platform, terminal, wezterm: found, checks, piBin: pi?.piBin, piCommand: pi?.piCommand, powershell };
 	}
 
-	const explicitPi = env.PI_WORKSPACE_PI_BIN;
+	const explicitPi = envCompat(env, "PI_REOPEN_PI_BIN");
 	const candidate = explicitPi ? shellQuote(explicitPi) : '"$pi_bin"';
 	const probeScript = [
 		launchSetup(env, explicitPi),

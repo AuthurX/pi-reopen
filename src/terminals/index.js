@@ -1,3 +1,4 @@
+import { envCompat } from "../env.js";
 import * as wezterm from "./wezterm.js";
 
 /**
@@ -16,7 +17,7 @@ export function getTerminal(id = "wezterm") {
 	return TERMINALS[id];
 }
 
-/** PI_WORKSPACE_TERMINAL 选择适配器；默认 wezterm。 */
+/** PI_REOPEN_TERMINAL 选择适配器；默认 wezterm。 */
 export function terminalId(env = process.env) {
-	return env.PI_WORKSPACE_TERMINAL || "wezterm";
+	return envCompat(env, "PI_REOPEN_TERMINAL") || "wezterm";
 }

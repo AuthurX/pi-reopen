@@ -48,7 +48,7 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
     registerShortcut() {},
   });
   const agentDir = join(home, '.pi', 'agent');
-  const membersDir = join(agentDir, 'pi-workspace', 'members');
+  const membersDir = join(agentDir, 'pi-reopen', 'members');
   const memberCount = () => { try { return fs.readdirSync(membersDir).length; } catch { return 0; } };
   const context = {
     mode: 'tui', cwd: home,
@@ -62,7 +62,7 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
 test('registration write failures notify once and never throw', async (t) => {
   const f = await loadExtension(t);
   // 用一个同名文件占住 members 目录，让 writeMember 必然失败。
-  fs.writeFileSync(join(f.agentDir, 'pi-workspace', 'members'), 'not-a-dir');
+  fs.writeFileSync(join(f.agentDir, 'pi-reopen', 'members'), 'not-a-dir');
   f.events.session_start({}, f.context);
   f.events.message_end({ message: { role: 'user' } }, f.context);
   f.events.message_end({ message: { role: 'user' } }, f.context);
@@ -81,7 +81,7 @@ test('/name changes refresh the registered name immediately', async (t) => {
 
 test('extension writes a self-record so doctor can detect it', async (t) => {
   const f = await loadExtension(t);
-  const record = JSON.parse(fs.readFileSync(join(f.agentDir, 'pi-workspace', 'extension.json'), 'utf8'));
+  const record = JSON.parse(fs.readFileSync(join(f.agentDir, 'pi-reopen', 'extension.json'), 'utf8'));
   assert.match(record.version, /^\d+\.\d+\.\d+/);
   assert.equal(record.schemaVersion, 2);
   assert.ok(record.ts > 0);

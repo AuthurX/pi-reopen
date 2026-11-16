@@ -39,10 +39,12 @@ export function readMember(sessionId, paths = workspacePaths()) {
 }
 
 export function deleteMember(sessionId, paths = workspacePaths()) {
-	try {
-		unlinkSync(join(paths.members, `${sessionId}.json`));
-	} catch {
-		/* 不存在即目标状态 */
+	for (const dir of [paths.members, paths.legacyMembers].filter(Boolean)) {
+		try {
+			unlinkSync(join(dir, `${sessionId}.json`));
+		} catch {
+			/* 不存在即目标状态 */
+		}
 	}
 }
 
@@ -52,24 +54,30 @@ export function deleteMember(sessionId, paths = workspacePaths()) {
  */
 export function readMembers(paths = workspacePaths()) {
 	const members = [];
+	const seen = new Set();
 	let unsupported = 0;
-	let files;
-	try {
-		files = readdirSync(paths.members);
-	} catch {
-		return { members, unsupported };
-	}
-	for (const file of files.filter((f) => f.endsWith(".json"))) {
+	// 先读新目录，再读旧目录；同一 sessionId 以新目录为准（迁移期不重复恢复）。
+	for (const dir of [paths.members, paths.legacyMembers].filter(Boolean)) {
+		let files;
 		try {
-			const entry = JSON.parse(readFileSync(join(paths.members, file), "utf8"));
-			if (!entry?.sessionId) continue;
-			if (Number.isInteger(entry.schemaVersion) && entry.schemaVersion > MEMBER_SCHEMA) {
-				unsupported++;
-				continue;
-			}
-			members.push(entry);
+			files = readdirSync(dir);
 		} catch {
-			/* 跳过损坏记录，恢复时宁可少报不可错报 */
+			continue;
+		}
+		for (const file of files.filter((f) => f.endsWith(".json"))) {
+			try {
+				const entry = JSON.parse(readFileSync(join(dir, file), "utf8"));
+				if (!entry?.sessionId || seen.has(entry.sessionId)) continue;
+				if (Number.isInteger(entry.schemaVersion) && entry.schemaVersion > MEMBER_SCHEMA) {
+					unsupported++;
+					seen.add(entry.sessionId);
+					continue;
+				}
+				seen.add(entry.sessionId);
+				members.push(entry);
+			} catch {
+				/* 跳过损坏记录，恢复时宁可少报不可错报 */
+			}
 		}
 	}
 	return { members: members.sort((a, b) => a.ts - b.ts), unsupported };
@@ -82,7 +90,7 @@ export function listMembers(paths = workspacePaths()) {
 /** 清空登记与启动占用；不触碰旧格式文件与对话文件。 */
 export function clearWorkspace(paths = workspacePaths()) {
 	let removed = 0;
-	for (const dir of [paths.members, paths.claims]) {
+	for (const dir of [paths.members, paths.claims, paths.legacyMembers, paths.legacyClaims].filter(Boolean)) {
 		let files;
 		try {
 			files = readdirSync(dir);

@@ -1,11 +1,13 @@
 /**
  * 输出国际化：默认跟随 locale，中文环境用中文，其余用英文（npm 包面向英文用户）。
- * PI_WORKSPACE_LANG=zh|en 可强制指定。
+ * PI_REOPEN_LANG=zh|en 可强制指定（旧名 PI_WORKSPACE_LANG 仍生效）。
  */
+import { envCompat } from "./env.js";
+
 export const LANGS = ["zh", "en"];
 
 export function resolveLang(env = process.env) {
-	const explicit = env.PI_WORKSPACE_LANG;
+	const explicit = envCompat(env, "PI_REOPEN_LANG");
 	if (explicit) {
 		const value = String(explicit).toLowerCase();
 		if (value.startsWith("en")) return "en";
@@ -167,7 +169,7 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 
 	// 预检
 	"pf.terminal": { zh: "终端适配器", en: "Terminal adapter" },
-	"pf.terminalHint": { zh: "可用 PI_WORKSPACE_TERMINAL 选择适配器；当前只支持 wezterm", en: "Use PI_WORKSPACE_TERMINAL to choose an adapter; only wezterm is supported today" },
+	"pf.terminalHint": { zh: "可用 PI_REOPEN_TERMINAL 选择适配器；当前只支持 wezterm", en: "Use PI_REOPEN_TERMINAL to choose an adapter; only wezterm is supported today" },
 	"pf.platform": { zh: "运行平台", en: "Platform" },
 	"pf.platformHint": { zh: "支持 Linux、macOS、Windows 和 WSL", en: "Supported: Linux, macOS, Windows and WSL" },
 	"pf.distro": { zh: "WSL 发行版", en: "WSL distro" },
@@ -184,8 +186,8 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"pf.wezterm": { zh: "WezTerm 程序", en: "WezTerm binary" },
 	"pf.weztermMissing": { zh: "未找到", en: "not found" },
 	"pf.weztermExplicitMissing": { zh: "指定的文件不存在：{path}", en: "specified file does not exist: {path}" },
-	"pf.weztermHint": { zh: "未找到 WezTerm；可用环境变量 PI_WORKSPACE_WEZTERM 指定完整路径", en: "WezTerm not found; set PI_WORKSPACE_WEZTERM to its full path" },
-	"pf.weztermExplicitHint": { zh: "检查 PI_WORKSPACE_WEZTERM 环境变量或传入的路径", en: "Check the PI_WORKSPACE_WEZTERM variable or the supplied path" },
+	"pf.weztermHint": { zh: "未找到 WezTerm；可用环境变量 PI_REOPEN_WEZTERM 指定完整路径", en: "WezTerm not found; set PI_REOPEN_WEZTERM to its full path" },
+	"pf.weztermExplicitHint": { zh: "检查 PI_REOPEN_WEZTERM 环境变量或传入的路径", en: "Check the PI_REOPEN_WEZTERM variable or the supplied path" },
 	"pf.weztermExec": { zh: "WezTerm 程序执行", en: "WezTerm executes" },
 	"pf.weztermExecOk": { zh: "ok", en: "ok" },
 	"pf.weztermExecEnoexec": { zh: "Exec format error (ENOEXEC)", en: "Exec format error (ENOEXEC)" },
@@ -196,8 +198,8 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"pf.weztermInstanceHint": { zh: "请先打开本机 WezTerm；检查 WEZTERM_UNIX_SOCKET 是否指向当前实例", en: "Start WezTerm first; check that WEZTERM_UNIX_SOCKET points at the current instance" },
 	"pf.pi": { zh: "pi 命令", en: "pi command" },
 	"pf.piHint": {
-		zh: "请先安装 pi 并加入 PATH，或设置 PI_WORKSPACE_PI_BIN 为当前系统内可执行文件的绝对路径（不含参数、别名或 Shell 函数）",
-		en: "Install pi and put it on PATH, or set PI_WORKSPACE_PI_BIN to an absolute executable path (no arguments, aliases or shell functions)",
+		zh: "请先安装 pi 并加入 PATH，或设置 PI_REOPEN_PI_BIN 为当前系统内可执行文件的绝对路径（不含参数、别名或 Shell 函数）",
+		en: "Install pi and put it on PATH, or set PI_REOPEN_PI_BIN to an absolute executable path (no arguments, aliases or shell functions)",
 	},
 	"pf.powershell": { zh: "Windows PowerShell", en: "Windows PowerShell" },
 	"pf.powershellHint": { zh: "需要 Windows PowerShell 5.1，供启动和进程身份检测使用", en: "Windows PowerShell 5.1 is required for launching and identity checks" },

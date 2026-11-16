@@ -53,7 +53,10 @@ function unlinkIfUnchanged(file, expected, key) {
 }
 
 export function readClaim(sessionId, paths = workspacePaths()) {
-	return readJson(join(paths.claims, `${sessionId}.json`));
+	const current = readJson(join(paths.claims, `${sessionId}.json`));
+	if (current) return current;
+	// 迁移期：旧版本 CLI 仍可能写 pi-workspace/starting，读一次避免重复开标签页。
+	return paths.legacyClaims ? readJson(join(paths.legacyClaims, `${sessionId}.json`)) : undefined;
 }
 
 /** 声明仍有效：未过期且持有进程存活。list 用它显示“启动占用中”。 */
@@ -85,34 +88,39 @@ export function claimSession(sessionId, ownerPid, paths = workspacePaths(), now 
 			return { claimed: false, holder: existing };
 		}
 		unlinkIfUnchanged(file, existing, "pid");
+		if (paths.legacyClaims) unlinkIfUnchanged(join(paths.legacyClaims, `${sessionId}.json`), existing, "pid");
 	}
 	return { claimed: false, holder: readJson(file) };
 }
 
 /** 新 Pi 完成登记时清除自己的启动声明。 */
 export function releaseClaim(sessionId, paths = workspacePaths()) {
-	try {
-		unlinkSync(join(paths.claims, `${sessionId}.json`));
-	} catch {
-		/* 不存在即目标状态 */
+	for (const dir of [paths.claims, paths.legacyClaims].filter(Boolean)) {
+		try {
+			unlinkSync(join(dir, `${sessionId}.json`));
+		} catch {
+			/* 不存在即目标状态 */
+		}
 	}
 }
 
 /** 清理过期或持有者已死的声明（恢复前调用）。 */
 export function sweepClaims(paths = workspacePaths(), now = Date.now()) {
-	let files;
-	try {
-		files = readdirSync(paths.claims);
-	} catch {
-		return;
-	}
-	for (const file of files.filter((f) => f.endsWith(".json"))) {
+	for (const dir of [paths.claims, paths.legacyClaims].filter(Boolean)) {
+		let files;
 		try {
-			const claim = JSON.parse(readFileSync(join(paths.claims, file), "utf8"));
-			const dead = now - claim.ts >= CLAIM_TTL_MS || processStart(claim.pid) === undefined;
-			if (dead) unlinkSync(join(paths.claims, file));
+			files = readdirSync(dir);
 		} catch {
-			/* 损坏声明留待 TTL 后接管 */
+			continue;
+		}
+		for (const file of files.filter((f) => f.endsWith(".json"))) {
+			try {
+				const claim = JSON.parse(readFileSync(join(dir, file), "utf8"));
+				const dead = now - claim.ts >= CLAIM_TTL_MS || processStart(claim.pid) === undefined;
+				if (dead) unlinkSync(join(dir, file));
+			} catch {
+				/* 损坏声明留待 TTL 后接管 */
+			}
 		}
 	}
 }

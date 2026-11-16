@@ -118,16 +118,22 @@ pi install git:github.com/AuthurX/pi-workspace
 
 | Environment variable | Purpose |
 | --- | --- |
-| `PI_WORKSPACE_WEZTERM` | Absolute path of local WezTerm (`wezterm` / `wezterm.exe`); in WSL use its Windows path, e.g. `/mnt/c/Program Files/WezTerm/wezterm.exe` |
-| `PI_WORKSPACE_PI_BIN` | Absolute Pi executable path, no arguments; Windows accepts npm `pi.cmd`, the package's JS entry, or `.exe`; aliases/functions are unsupported |
+| `PI_REOPEN_WEZTERM` | Absolute path of local WezTerm (`wezterm` / `wezterm.exe`); in WSL use its Windows path, e.g. `/mnt/c/Program Files/WezTerm/wezterm.exe` |
+| `PI_REOPEN_PI_BIN` | Absolute Pi executable path, no arguments; Windows accepts npm `pi.cmd`, the package's JS entry, or `.exe`; aliases/functions are unsupported |
 | `PI_CODING_AGENT_DIR` | Use a different Pi config/registry directory; CLI and extension must stay consistent |
-| `PI_WORKSPACE_SRC` | Development only: overrides the shared `src/` directory; not needed for normal package installs |
+| `PI_REOPEN_SRC` | Development only: overrides the shared `src/` directory; not needed for normal package installs |
+| `PI_REOPEN_LANG` | Force output language: `zh` or `en` (defaults from `LC_ALL`/`LANG`) |
+| `PI_REOPEN_TERMINAL` | Terminal adapter id; only `wezterm` is implemented |
+| `PI_REOPEN_MAX_AGE_DAYS` | Days after which dead records stop being restored (default 14, `0` disables) |
+| `PI_REOPEN_CONFIRM_THRESHOLD` | Ask before opening more than N tabs (default 5) |
+
+Legacy names (`PI_WORKSPACE_*`) are still honored; the canonical `PI_REOPEN_*` name wins when both are set.
 
 For example, if Pi is installed via nvm, pnpm, or a custom npm prefix, set it explicitly:
 
 ```bash
-export PI_WORKSPACE_PI_BIN="$(type -P pi)"
-export PI_WORKSPACE_WEZTERM="/mnt/c/Program Files/WezTerm/wezterm.exe"
+export PI_REOPEN_PI_BIN="$(type -P pi)"
+export PI_REOPEN_WEZTERM="/mnt/c/Program Files/WezTerm/wezterm.exe"
 pi-reopen doctor
 ```
 
@@ -161,7 +167,7 @@ test/                    Node built-in tests (isolated dirs + injected mocks, no
 docs/                    requirements and status
 ```
 
-Tests cover core restore, signal handling order, reload cleanup, `/reopen recent` picking, non-standard Pi install paths, shell escaping, and loading after the package moves; tests are isolated via temporary directories and a mock launcher. The test hook `PI_WORKSPACE_HOOKS` should not be set during normal use.
+Tests cover core restore, signal handling order, reload cleanup, `/reopen recent` picking, non-standard Pi install paths, shell escaping, and loading after the package moves; tests are isolated via temporary directories and a mock launcher. The test hook `PI_REOPEN_HOOKS` should not be set during normal use.
 
 Optional Pi PTY test: `python test/pty-shutdown.py`. Uses a temporary config and session, checking that signal exits keep the member and a deliberate `/quit` removes it; no model calls, no visible tabs.
 

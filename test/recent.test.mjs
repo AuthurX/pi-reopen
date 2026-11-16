@@ -73,7 +73,7 @@ async function loadRecent(t) {
     registerCommand: (name, command) => { commands[name] = command; },
     registerShortcut() {},
   });
-  const membersDir = join(agentDir, 'pi-workspace', 'members');
+  const membersDir = join(agentDir, 'pi-reopen', 'members');
   const context = {
     mode: 'tui', cwd: home,
     sessionManager: { getSessionId: () => 'current', getSessionFile: () => join(home, 'current.jsonl'), getSessionName: () => 'current' },
@@ -151,7 +151,7 @@ test('/reopen recent: spawn failure releases claim, registers no member, reports
   await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 1, '请求仍发出');
   assert.equal(fs.existsSync(join(f.membersDir, 'bad.json')), false, '失败不登记成员');
-  assert.equal(fs.existsSync(join(f.agentDir, 'pi-workspace', 'starting', 'bad.json')), false, '失败回收启动声明');
+  assert.equal(fs.existsSync(join(f.agentDir, 'pi-reopen', 'starting', 'bad.json')), false, '失败回收启动声明');
   assert.match(f.notices.join('\n'), /WezTerm 请求失败 — stub failure/);
   assert.match(f.notices.join('\n'), /没有打开任何标签页/);
 });
@@ -234,7 +234,7 @@ test('/reopen recent: confirmed registration keeps the claim and reports verific
   f.context.ui.input = async () => '1';
   await f.commands.reopen.handler('recent', f.context);
   assert.match(f.notices.join('\n'), /已确认启动/);
-  assert.ok(fs.existsSync(join(f.agentDir, 'pi-workspace', 'starting', 'cand.json')), '确认后保留声明直至 Pi 自行清除');
+  assert.ok(fs.existsSync(join(f.agentDir, 'pi-reopen', 'starting', 'cand.json')), '确认后保留声明直至 Pi 自行清除');
 });
 
 test('/reopen recent: unconfirmed start releases the claim so a retry is possible', async (t) => {
@@ -246,6 +246,6 @@ test('/reopen recent: unconfirmed start releases the claim so a retry is possibl
   f.context.ui.input = async () => '1';
   await f.commands.reopen.handler('recent', f.context);
   assert.match(f.notices.join('\n'), /超时未确认启动/);
-  assert.equal(fs.existsSync(join(f.agentDir, 'pi-workspace', 'starting', 'cand.json')), false, '未确认必须释放声明');
+  assert.equal(fs.existsSync(join(f.agentDir, 'pi-reopen', 'starting', 'cand.json')), false, '未确认必须释放声明');
   assert.ok(fs.existsSync(join(f.membersDir, 'cand.json')), '占位记录保留，便于下次重试');
 });

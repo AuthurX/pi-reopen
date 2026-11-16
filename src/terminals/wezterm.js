@@ -5,6 +5,7 @@ import { resolveLang, t } from "../i18n.js";
 import { launchSetup, shellQuote } from "../launch.js";
 import { envValue, powershellArgs, powershellPath, runtimePlatform } from "../platform.js";
 import { buildWindowsScript } from "../windows.js";
+import { envCompat } from "../env.js";
 
 export const id = "wezterm";
 export const PANE_QUERY_TIMEOUT_MS = 5_000;
@@ -30,8 +31,9 @@ export function discover(env = process.env, deps = {}) {
 	const fileExists = deps.isFile ?? isFile;
 	const readdir = deps.readdir ?? readdirSync;
 	const execFile = deps.execFile ?? execFileSync;
-	if (env.PI_WORKSPACE_WEZTERM) {
-		return fileExists(env.PI_WORKSPACE_WEZTERM) ? env.PI_WORKSPACE_WEZTERM : undefined;
+	const explicit = envCompat(env, "PI_REOPEN_WEZTERM");
+	if (explicit) {
+		return fileExists(explicit) ? explicit : undefined;
 	}
 	const platform = deps.platform ?? runtimePlatform(env);
 	if (platform !== "wsl") {

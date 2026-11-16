@@ -110,16 +110,22 @@ pi install git:github.com/AuthurX/pi-workspace
 
 | 环境变量 | 用途 |
 | --- | --- |
-| `PI_WORKSPACE_WEZTERM` | 本机 WezTerm 的绝对路径（`wezterm` / `wezterm.exe`）；WSL 中使用 Windows 版本，例如 `/mnt/c/Program Files/WezTerm/wezterm.exe` |
-| `PI_WORKSPACE_PI_BIN` | Pi 可执行文件绝对路径，不含参数；Windows 支持 npm `pi.cmd`、包的 JS 入口或 `.exe`；不支持别名或 Shell 函数 |
+| `PI_REOPEN_WEZTERM` | 本机 WezTerm 的绝对路径（`wezterm` / `wezterm.exe`）；WSL 中使用 Windows 版本，例如 `/mnt/c/Program Files/WezTerm/wezterm.exe` |
+| `PI_REOPEN_PI_BIN` | Pi 可执行文件绝对路径，不含参数；Windows 支持 npm `pi.cmd`、包的 JS 入口或 `.exe`；不支持别名或 Shell 函数 |
 | `PI_CODING_AGENT_DIR` | 使用其他 Pi 配置/登记目录；CLI 与扩展需保持一致 |
-| `PI_WORKSPACE_SRC` | 仅供开发：覆盖共享 `src/` 目录，正常 package 安装无需设置 |
+| `PI_REOPEN_SRC` | 仅供开发：覆盖共享 `src/` 目录，正常 package 安装无需设置 |
+| `PI_REOPEN_LANG` | 强制输出语言：`zh` 或 `en`（默认跟随 `LC_ALL`/`LANG`） |
+| `PI_REOPEN_TERMINAL` | 终端适配器 id；目前只实现 `wezterm` |
+| `PI_REOPEN_MAX_AGE_DAYS` | 超过多少天的死记录不再自动恢复（默认 14，`0` 表示不限制） |
+| `PI_REOPEN_CONFIRM_THRESHOLD` | 打开超过 N 个标签页前先确认（默认 5） |
+
+旧变量名（`PI_WORKSPACE_*`）仍然生效；两者同时设置时以 `PI_REOPEN_*` 为准。
 
 例如 Pi 通过 nvm、pnpm 或自定义 npm prefix 安装时，可显式指定：
 
 ```bash
-export PI_WORKSPACE_PI_BIN="$(type -P pi)"
-export PI_WORKSPACE_WEZTERM="/mnt/c/Program Files/WezTerm/wezterm.exe"
+export PI_REOPEN_PI_BIN="$(type -P pi)"
+export PI_REOPEN_WEZTERM="/mnt/c/Program Files/WezTerm/wezterm.exe"
 pi-reopen doctor
 ```
 
@@ -153,7 +159,7 @@ test/                    Node 内置测试（隔离目录 + 注入式模拟，�
 docs/                    需求与状态
 ```
 
-测试覆盖核心恢复、信号处理顺序、reload 清理、`/reopen recent` 补选、非标准 Pi 安装路径、Shell 转义及 package 移动后的加载；测试通过临时目录和模拟启动器隔离。测试钩子 `PI_WORKSPACE_HOOKS` 不应在正常使用时设置。
+测试覆盖核心恢复、信号处理顺序、reload 清理、`/reopen recent` 补选、非标准 Pi 安装路径、Shell 转义及 package 移动后的加载；测试通过临时目录和模拟启动器隔离。测试钩子 `PI_REOPEN_HOOKS` 不应在正常使用时设置。
 
 可选 Pi PTY 测试：`python test/pty-shutdown.py`。使用临时配置和会话，检查信号退出保留成员、主动 `/quit` 删除成员；不调用模型、不打开可见标签页。
 

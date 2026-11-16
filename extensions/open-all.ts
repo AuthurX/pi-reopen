@@ -9,9 +9,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
 
+/** 环境变量兼容（与 src/env.js 同义）：canonical 优先，旧名 PI_WORKSPACE_* 仍生效。 */
+function envCompatValue(name: string): string | undefined {
+	const legacy = name.replace(/^PI_REOPEN_/, "PI_WORKSPACE_");
+	return process.env[name] ?? process.env[legacy];
+}
+
 function resolveSrcDir(): string {
 	const candidates: string[] = [];
-	if (process.env.PI_WORKSPACE_SRC) candidates.push(process.env.PI_WORKSPACE_SRC);
+	const explicitSrc = envCompatValue("PI_REOPEN_SRC");
+	if (explicitSrc) candidates.push(explicitSrc);
 	try {
 		candidates.push(join(dirname(realpathSync(fileURLToPath(import.meta.url))), "..", "src"));
 	} catch {
@@ -25,7 +32,7 @@ function resolveSrcDir(): string {
 			/* 尝试下一个候选 */
 		}
 	}
-	throw new Error("无法定位 pi-reopen 源码目录；可设置 PI_WORKSPACE_SRC");
+	throw new Error("无法定位 pi-reopen 源码目录；可设置 PI_REOPEN_SRC");
 }
 
 const ENTRY_WINDOW_MS = 24 * 3_600_000;
@@ -90,9 +97,9 @@ export default async function (pi: ExtensionAPI) {
 		for (const signal of signals) process.off(signal, markSignalExit);
 	}
 
-	// 测试钩子：仅在设置 PI_WORKSPACE_HOOKS 时生效，返回 runRestore 的注入参数
+	// 测试钩子：仅在设置 PI_REOPEN_HOOKS 时生效，返回 runRestore 的注入参数
 	async function loadHooks(): Promise<any> {
-		const file = process.env.PI_WORKSPACE_HOOKS;
+		const file = envCompatValue("PI_REOPEN_HOOKS");
 		if (!file) return {};
 		try {
 			const mod = await import(pathToFileURL(file).href);
@@ -180,7 +187,7 @@ export default async function (pi: ExtensionAPI) {
 			const hooks = await loadHooks();
 			const probe = typeof hooks.paneExists === "function"
 				? hooks.paneExists
-				: (id: number) => pane.paneExists(id, { wezterm: process.env.PI_WORKSPACE_WEZTERM, env: process.env });
+				: (id: number) => pane.paneExists(id, { wezterm: envCompatValue("PI_REOPEN_WEZTERM"), env: process.env });
 			const alive = await probe(paneId);
 			// false 或无法判断（undefined）都保守地按“已消失”处理：宁可多恢复一次，不丢会话。
 			return alive !== true;

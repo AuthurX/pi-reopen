@@ -1,4 +1,5 @@
 import { releaseClaim, activeClaim } from "./claims.js";
+import { envCompat } from "./env.js";
 import { currentBootId } from "./liveness.js";
 import { deleteMember, listMembers } from "./members.js";
 import { workspacePaths } from "./paths.js";
@@ -9,7 +10,7 @@ import { runtimePlatform } from "./platform.js";
 export const DEFAULT_MAX_AGE_DAYS = 14;
 
 export function maxAgeMsFromEnv(env = process.env) {
-	const raw = env.PI_WORKSPACE_MAX_AGE_DAYS;
+	const raw = envCompat(env, "PI_REOPEN_MAX_AGE_DAYS");
 	if (raw === undefined || raw === "") return DEFAULT_MAX_AGE_DAYS * 86_400_000;
 	const days = Number(raw);
 	if (!Number.isFinite(days) || days < 0) return DEFAULT_MAX_AGE_DAYS * 86_400_000;

@@ -4,7 +4,7 @@
 
 ## 选择适配器
 
-环境变量 `PI_WORKSPACE_TERMINAL` 指定适配器 id，默认 `wezterm`。未知 id 会让预检失败（`终端适配器` 检查项），不会静默退回 WezTerm——用错误的终端打开标签页只会产生坏结果。
+环境变量 `PI_REOPEN_TERMINAL` 指定适配器 id，默认 `wezterm`。未知 id 会让预检失败（`终端适配器` 检查项），不会静默退回 WezTerm——用错误的终端打开标签页只会产生坏结果。
 
 ## 接口
 
@@ -13,7 +13,7 @@
 ```js
 export const TERMINALS = { wezterm };
 export function getTerminal(id) { /* 返回适配器或 undefined */ }
-export function terminalId(env) { /* 读取 PI_WORKSPACE_TERMINAL */ }
+export function terminalId(env) { /* 读取 PI_REOPEN_TERMINAL */ }
 ```
 
 每个适配器导出：

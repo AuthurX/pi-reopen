@@ -10,7 +10,7 @@ import test from 'node:test';
 process.env.PI_WORKSPACE_LANG ??= 'zh';
 import { workspacePaths } from '../src/paths.js';
 import { currentBootId, isLive, processStart } from '../src/liveness.js';
-import { listMembers, writeMember } from '../src/members.js';
+import { deleteMember, listMembers, writeMember } from '../src/members.js';
 import { CLAIM_TTL_MS, claimSession, readClaim, releaseClaim, sweepClaims } from '../src/claims.js';
 import { buildRestorePlan, matchesOnly, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
@@ -478,6 +478,38 @@ test('records with a newer schema are skipped and reported by list', async (t) =
   const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
   await cliRun(['list'], { stdout, env: { ...f.env, PI_CODING_AGENT_DIR: f.paths.agent } });
   assert.match(out.join('\n'), /结构版本比当前 CLI 新/);
+});
+
+test('workspace paths use the pi-reopen name and still expose legacy locations', async (t) => {
+  const { workspacePaths } = await import('../src/paths.js');
+  const paths = workspacePaths({ HOME: '/home/u' });
+  assert.equal(paths.workspace, '/home/u/.pi/agent/pi-reopen');
+  assert.equal(paths.members, '/home/u/.pi/agent/pi-reopen/members');
+  assert.equal(paths.legacyMembers, '/home/u/.pi/agent/pi-workspace/members');
+});
+
+test('envCompat prefers the canonical name and still honors the legacy one', async (t) => {
+  const { envCompat, legacyEnvName } = await import('../src/env.js');
+  assert.equal(legacyEnvName('PI_REOPEN_WEZTERM'), 'PI_WORKSPACE_WEZTERM');
+  assert.equal(envCompat({ PI_REOPEN_WEZTERM: '/a', PI_WORKSPACE_WEZTERM: '/b' }, 'PI_REOPEN_WEZTERM'), '/a');
+  assert.equal(envCompat({ PI_WORKSPACE_WEZTERM: '/b' }, 'PI_REOPEN_WEZTERM'), '/b');
+  assert.equal(envCompat({}, 'PI_REOPEN_WEZTERM'), undefined);
+});
+
+test('members from the legacy directory are merged, canonical records win', async (t) => {
+  const f = fixture(t);
+  fs.mkdirSync(f.paths.legacyMembers, { recursive: true });
+  const legacyEntry = { sessionId: 'legacy', cwd: f.paths.agent, sessionFile: join(f.paths.sessions, 'x.jsonl'), ts: 1 };
+  fs.writeFileSync(join(f.paths.legacyMembers, 'legacy.json'), JSON.stringify(legacyEntry));
+  fs.writeFileSync(join(f.paths.legacyMembers, 'dup.json'), JSON.stringify({ ...legacyEntry, sessionId: 'dup', ts: 2, name: 'old' }));
+  writeMember({ ...liveEntry(f.paths, 'dup'), pid: undefined, name: 'new' }, f.paths);
+  const { readMembers } = await import('../src/members.js');
+  const { members } = readMembers(f.paths);
+  const byId = Object.fromEntries(members.map((m) => [m.sessionId, m]));
+  assert.equal(byId['legacy']?.ts, 1, '旧目录记录必须仍可读取');
+  assert.equal(byId['dup']?.name, 'new', '同一 sessionId 以新目录为准');
+  deleteMember('legacy', f.paths);
+  assert.equal(fs.existsSync(join(f.paths.legacyMembers, 'legacy.json')), false, '删除必须同时清理旧目录');
 });
 
 test('terminal adapters are resolved by name and unknown ones fail closed', async (t) => {

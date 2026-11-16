@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import { binfmtStatus, persistHint } from "./binfmt.js";
+import { envCompat } from "./env.js";
 import { healthChecks, registryHealth } from "./health.js";
 import { resolveLang, t } from "./i18n.js";
 import { workspacePaths } from "./paths.js";
@@ -186,7 +187,7 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 			const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : undefined;
 			const delayRaw = Number(flagValue(flags, "--delay"));
 			const delayMs = Number.isFinite(delayRaw) && delayRaw > 0 ? delayRaw : 0;
-			const thresholdRaw = Number(env.PI_WORKSPACE_CONFIRM_THRESHOLD);
+			const thresholdRaw = Number(envCompat(env, "PI_REOPEN_CONFIRM_THRESHOLD"));
 			const yes = hasFlag("--yes") || hasFlag("-y");
 			const confirm = yes || hasFlag("--dry-run") || hasFlag("--json")
 				? undefined

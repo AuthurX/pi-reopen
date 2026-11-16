@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { win32 } from "node:path";
+import { envCompat } from "./env.js";
 import { agentDir } from "./paths.js";
 import { resolveLang, t } from "./i18n.js";
 import { envValue } from "./platform.js";
@@ -16,7 +17,7 @@ function isFile(file) {
 export function discoverWindowsPi(env = process.env, deps = {}) {
 	const fileExists = deps.isFile ?? isFile;
 	const readFile = deps.readFile ?? ((file) => readFileSync(file, "utf8"));
-	const explicit = env.PI_WORKSPACE_PI_BIN;
+	const explicit = envCompat(env, "PI_REOPEN_PI_BIN");
 	const dirs = (envValue(env, "PATH") || "").split(";")
 		.map((dir) => dir.replace(/^"|"$/g, "")).filter((dir) => win32.isAbsolute(dir));
 	const candidates = explicit ? [explicit] : dirs.flatMap((dir) => ["pi.exe", "pi.cmd"].map((name) => win32.join(dir, name)));

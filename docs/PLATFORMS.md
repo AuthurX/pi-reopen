@@ -14,7 +14,7 @@
 - 先打开 WezTerm，再运行 `pi-reopen doctor` 和 `pi-reopen`。不自动拉起 GUI，不恢复远程 SSH 域。
 - CLI 与 Pi 扩展必须运行在同一系统、同一用户下，并使用相同 `PI_CODING_AGENT_DIR`。Windows 与 WSL 不共用登记目录；本功能不是跨机器会话迁移。
 - WezTerm 必须是本机安装的可执行程序。Flatpak/Snap 沙箱、容器、远程 mux 不在本轮验收范围。
-- Linux/macOS 使用 Bash 执行启动脚本，不要求用户交互 Shell 是 Bash。依赖仅在 zsh/fish 中初始化时，需把 Pi 放入调用方 PATH，或设置 `PI_WORKSPACE_PI_BIN`。
+- Linux/macOS 使用 Bash 执行启动脚本，不要求用户交互 Shell 是 Bash。依赖仅在 zsh/fish 中初始化时，需把 Pi 放入调用方 PATH，或设置 `PI_REOPEN_PI_BIN`。
 - macOS 会自动查找 PATH、Homebrew 和 `/Applications/WezTerm.app/Contents/MacOS/wezterm`；其他位置可显式配置。
 - Windows 需要系统 Windows PowerShell 5.1 和 CIM 权限；不自动修改执行策略。Pi 的 Bash 工具还需要 Git for Windows。Pi 官方建议 WezTerm 使用近期 nightly，旧版 Windows conhost 存在 TUI 兼容问题。
 
@@ -25,8 +25,8 @@
 自定义安装布局、pnpm shim 等无法识别时，指定包的 JS 入口或原生 `.exe`：
 
 ```powershell
-$env:PI_WORKSPACE_WEZTERM = 'C:\Program Files\WezTerm\wezterm.exe'
-$env:PI_WORKSPACE_PI_BIN = 'C:\your-install\pi-coding-agent\dist\cli.js'
+$env:PI_REOPEN_WEZTERM = 'C:\Program Files\WezTerm\wezterm.exe'
+$env:PI_REOPEN_PI_BIN = 'C:\your-install\pi-coding-agent\dist\cli.js'
 node .\bin\pi-reopen.js doctor
 ```
 

@@ -58,7 +58,7 @@ test('invalid explicit Pi paths fail closed without falling back to PATH', (t) =
     const pre = preflight({ env: { ...f.env, PI_WORKSPACE_PI_BIN: value }, prober: () => ({ status: 0 }) });
     const check = pre.checks.find(c => c.name === 'pi 命令');
     assert.equal(check.ok, false, value);
-    assert.match(check.hint, /PI_WORKSPACE_PI_BIN/);
+    assert.match(check.hint, /PI_REOPEN_PI_BIN/);
   }
   fs.chmodSync(f.pi, 0o644);
   const pre = preflight({ env: f.env, prober: () => ({ status: 0 }) });
