@@ -22,7 +22,8 @@ async function loadRecent(t) {
       }
     }
     fs.rmSync(home, { recursive: true, force: true });
-    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM', 'PI_WORKSPACE_TEST_CALLS', 'WSL_DISTRO_NAME']) delete process.env[key];
+    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM', 'PI_WORKSPACE_TEST_CALLS', 'WSL_DISTRO_NAME',
+      'PI_WORKSPACE_RECENT_NOWAIT', 'PI_WORKSPACE_RECENT_WAIT', 'PI_WORKSPACE_RECENT_INUSE', 'PI_WORKSPACE_TEST_REGISTER']) delete process.env[key];
   });
 
   const srcCopy = join(home, 'src');
@@ -30,10 +31,17 @@ async function loadRecent(t) {
   const calls = join(home, 'open-tab-calls.jsonl');
   fs.writeFileSync(join(srcCopy, 'spawn.js'), [
     'import { appendFileSync } from "node:fs";',
+    'import { writeMember } from "./members.js";',
+    'import { currentBootId, processStart } from "./liveness.js";',
     'export async function openTab(args) {',
     '  appendFileSync(process.env.PI_WORKSPACE_TEST_CALLS, JSON.stringify(args) + "\\n");',
     '  if (String(args.cwd).includes("FAIL")) return { ok: false, error: "stub failure" };',
-    '  return { ok: true, stdout: "pane" };',
+    '  if (process.env.PI_WORKSPACE_TEST_REGISTER === "1") {',
+    '    const id = String(args.sessionFile).split("/").pop().replace(/\.jsonl$/, "");',
+    '    writeMember({ sessionId: id, cwd: args.cwd, sessionFile: args.sessionFile, ts: Date.now(),',
+    '      pid: process.pid, processStart: processStart(process.pid), bootId: currentBootId() });',
+    '  }',
+    '  return { ok: true, stdout: "77" };',
     '}',
   ].join('\n'));
   fs.writeFileSync(join(srcCopy, 'preflight.js'), [
@@ -48,6 +56,8 @@ async function loadRecent(t) {
   process.env.PI_WORKSPACE_WEZTERM = join(home, 'wez.exe');
   process.env.WSL_DISTRO_NAME = 'Arch';
   process.env.PI_WORKSPACE_TEST_CALLS = calls;
+  process.env.PI_WORKSPACE_HOOKS = join(project, 'test', 'fixtures', 'recent-hooks.mjs');
+  process.env.PI_WORKSPACE_RECENT_NOWAIT = '1';
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');
 
   const raw = fs.readFileSync(join(project, 'extensions/open-all.ts'), 'utf8');
@@ -70,12 +80,14 @@ async function loadRecent(t) {
     ui: { notify: (m) => notices.push(m), input: async () => undefined, confirm: async () => true },
   };
   // 候选会话：24 小时内、非当前会话、非存活
-  function addCandidate(id, cwd) {
+  function addCandidate(id, cwd, name) {
     const dir = join(agentDir, 'sessions', 'proj');
     fs.mkdirSync(dir, { recursive: true });
     fs.mkdirSync(cwd, { recursive: true });
     const file = join(dir, `${id}.jsonl`);
-    fs.writeFileSync(file, JSON.stringify({ id, cwd }) + '\n');
+    const lines = [JSON.stringify({ type: 'session', id, cwd })];
+    if (name) lines.push(JSON.stringify({ type: 'session_info', name }));
+    fs.writeFileSync(file, lines.join('\n') + '\n');
     return file;
   }
   const readCalls = () => fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
@@ -160,4 +172,80 @@ test('/reopen recent: live and own sessions are excluded from candidates', async
   await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 0, 'own 与 live 会话均被排除');
   assert.match(f.notices.join('\n'), /近 24 小时没有可补选的对话/);
+});
+
+
+test('/reopen recent: candidate list shows the cwd basename and session name, not the raw id', async (t) => {
+  const f = await loadRecent(t);
+  await f.events.session_start({}, f.context);
+  f.addCandidate('0b6f9a1c-uuid', join(f.home, 'proj-cwd'), 'my-task');
+  let prompt;
+  f.context.ui.input = async (text) => { prompt = text; return undefined; };
+  await f.commands.reopen.handler('recent', f.context);
+  assert.match(prompt, /proj-cwd · my-task/, '候选必须显示可读的会话名');
+  assert.doesNotMatch(prompt, /0b6f9a1c-uuid/, '不能只显示 UUID');
+});
+
+test('/reopen recent: candidates whose cwd is gone are skipped and reported', async (t) => {
+  const f = await loadRecent(t);
+  await f.events.session_start({}, f.context);
+  const cwd = join(f.home, 'gone-cwd');
+  f.addCandidate('gone', cwd);
+  fs.rmSync(cwd, { recursive: true, force: true });
+  await f.commands.reopen.handler('recent', f.context);
+  assert.equal(f.readCalls().length, 0, '工作目录不存在时不得开标签页');
+  assert.match(f.notices.join('\n'), /工作目录已不存在/);
+});
+
+test('/reopen recent: refuses to open tabs while another restore holds the lock', async (t) => {
+  const f = await loadRecent(t);
+  await f.events.session_start({}, f.context);
+  f.addCandidate('cand', join(f.home, 'cand-cwd'));
+  const { acquireRestoreLock, releaseRestoreLock } = await import('../src/claims.js');
+  const { spawn } = await import('node:child_process');
+  const holder = spawn('sleep', ['30'], { stdio: 'ignore' });
+  await new Promise((resolve) => holder.once('spawn', resolve));
+  t.after(() => { try { holder.kill('SIGKILL'); } catch {} });
+  const paths = (await import('../src/paths.js')).workspacePaths({ PI_CODING_AGENT_DIR: f.agentDir });
+  acquireRestoreLock(paths, holder.pid);
+  f.context.ui.input = async () => '1';
+  await f.commands.reopen.handler('recent', f.context);
+  assert.equal(f.readCalls().length, 0);
+  assert.match(f.notices.join('\n'), /另一个恢复进程正在进行/);
+  releaseRestoreLock(paths, holder.pid);
+});
+
+test('/reopen recent: sessions already open in another Pi are not offered', async (t) => {
+  const f = await loadRecent(t);
+  await f.events.session_start({}, f.context);
+  const file = f.addCandidate('busy', join(f.home, 'busy-cwd'));
+  process.env.PI_WORKSPACE_RECENT_INUSE = file;
+  await f.commands.reopen.handler('recent', f.context);
+  assert.equal(f.readCalls().length, 0);
+  assert.match(f.notices.join('\n'), /近 24 小时没有可补选的对话/);
+});
+
+test('/reopen recent: confirmed registration keeps the claim and reports verification', async (t) => {
+  const f = await loadRecent(t);
+  await f.events.session_start({}, f.context);
+  f.addCandidate('cand', join(f.home, 'cand-cwd'));
+  process.env.PI_WORKSPACE_RECENT_NOWAIT = '0';
+  process.env.PI_WORKSPACE_TEST_REGISTER = '1';
+  f.context.ui.input = async () => '1';
+  await f.commands.reopen.handler('recent', f.context);
+  assert.match(f.notices.join('\n'), /已确认启动/);
+  assert.ok(fs.existsSync(join(f.agentDir, 'pi-workspace', 'starting', 'cand.json')), '确认后保留声明直至 Pi 自行清除');
+});
+
+test('/reopen recent: unconfirmed start releases the claim so a retry is possible', async (t) => {
+  const f = await loadRecent(t);
+  await f.events.session_start({}, f.context);
+  f.addCandidate('cand', join(f.home, 'cand-cwd'));
+  process.env.PI_WORKSPACE_RECENT_NOWAIT = '0';
+  process.env.PI_WORKSPACE_RECENT_WAIT = '150';
+  f.context.ui.input = async () => '1';
+  await f.commands.reopen.handler('recent', f.context);
+  assert.match(f.notices.join('\n'), /超时未确认启动/);
+  assert.equal(fs.existsSync(join(f.agentDir, 'pi-workspace', 'starting', 'cand.json')), false, '未确认必须释放声明');
+  assert.ok(fs.existsSync(join(f.membersDir, 'cand.json')), '占位记录保留，便于下次重试');
 });

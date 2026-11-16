@@ -4,7 +4,7 @@
  */
 import { realpathSync } from "node:fs";
 import { userInfo } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
@@ -41,6 +41,9 @@ export default async function (pi: ExtensionAPI) {
 	const restore = await load("restore.js");
 	const spawn = await load("spawn.js");
 	const pane = await load("pane.js");
+	const sessions = await load("sessions.js");
+	const inuse = await load("inuse.js");
+	const verify = await load("verify.js");
 	const preflightMod = await load("preflight.js");
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
@@ -147,7 +150,10 @@ export default async function (pi: ExtensionAPI) {
 
 	async function openRecent(ctx: any): Promise<void> {
 		const now = Date.now();
+		const hooks = await loadHooks();
 		const candidates: any[] = [];
+		const seenFiles = new Set<string>();
+		let missingCwd = 0;
 		try {
 			for (const dir of fs.readdirSync(paths.sessions)) {
 				const p = join(paths.sessions, dir);
@@ -162,22 +168,16 @@ export default async function (pi: ExtensionAPI) {
 					try {
 						const mtime = fs.statSync(full).mtimeMs;
 						if (now - mtime > ENTRY_WINDOW_MS) continue;
-						// 只读首行取会话头，避免加载整个会话文件（可达数 MB）
-						const fd = fs.openSync(full, "r");
-						let firstLine: string;
-						try {
-							const buf = Buffer.alloc(65536);
-							const bytes = fs.readSync(fd, buf, 0, buf.length, 0);
-							const chunk = buf.subarray(0, bytes).toString("utf8");
-							const nl = chunk.indexOf("\n");
-							firstLine = nl === -1 ? chunk : chunk.slice(0, nl);
-						} finally {
-							fs.closeSync(fd);
+						const meta = sessions.readSessionMeta(full);
+						if (!meta?.sessionId || !meta.cwd) continue;
+						const key = fs.realpathSync(full);
+						if (seenFiles.has(key)) continue;
+						seenFiles.add(key);
+						if (!fs.existsSync(meta.cwd)) {
+							missingCwd++;
+							continue;
 						}
-						const header = JSON.parse(firstLine);
-						if (header.id && header.cwd) {
-							candidates.push({ sessionId: header.id, cwd: header.cwd, sessionFile: full, ts: mtime });
-						}
+						candidates.push({ sessionId: meta.sessionId, cwd: meta.cwd, sessionFile: full, ts: mtime, name: meta.name });
 					} catch {
 						/* 跳过损坏文件 */
 					}
@@ -187,18 +187,21 @@ export default async function (pi: ExtensionAPI) {
 			/* 无会话目录 */
 		}
 		const live = new Set(members.listMembers(paths).filter((m: any) => liveness.isLive(m)).map((m: any) => m.sessionId));
+		// 与 CLI 恢复一致：即使没有登记记录，也不能对已被其他进程打开的会话再开一个 Pi。
+		const owners = hooks.owners ?? inuse.scanSessionOwners({ env: process.env });
 		const own = currentSessionId;
 		const todo = candidates
-			.filter((c) => c.sessionId !== own && !live.has(c.sessionId))
-			.sort((a, b) => b.ts - a.ts);
+			.filter((c: any) => c.sessionId !== own && !live.has(c.sessionId)
+				&& !owners.has(inuse.normalizeSessionPath(c.sessionFile)))
+			.sort((a: any, b: any) => b.ts - a.ts);
+		const skippedNote = missingCwd ? `（${missingCwd} 个工作目录已不存在，已跳过）` : "";
 		if (!todo.length) {
-			ctx.ui.notify("近 24 小时没有可补选的对话", "info");
+			ctx.ui.notify(`近 24 小时没有可补选的对话${skippedNote}`, "info");
 			return;
 		}
-		const list = todo
-			.map((e, i) => `${i + 1}. ${new Date(e.ts).toLocaleString()} | ${e.cwd} | ${e.name ?? e.sessionId}`)
-			.join("\n");
-		const input = await ctx.ui.input(`近期候选（不代表原先打开的窗口）\n${list}\n输入序号，多个用逗号分隔；取消则不打开`);
+		const describe = (e: any) => `${new Date(e.ts).toLocaleString()} | ${basename(e.cwd)}${e.name ? ` · ${e.name}` : ""}`;
+		const list = todo.map((e: any, i: number) => `${i + 1}. ${describe(e)} | ${e.cwd}`).join("\n");
+		const input = await ctx.ui.input(`近期候选（不代表原先打开的窗口）${skippedNote}\n${list}\n输入序号，多个用逗号分隔；取消则不打开`);
 		if (!input?.trim()) return;
 		const parts = input.trim().split(/[\s,，]+/);
 		if (parts.some((p: string) => !/^\d+$/.test(p) || Number(p) < 1 || Number(p) > todo.length)) {
@@ -206,7 +209,7 @@ export default async function (pi: ExtensionAPI) {
 			return;
 		}
 		const selected = [...new Set(parts.map(Number))].map((n: number) => todo[n - 1]);
-		if (!(await ctx.ui.confirm("恢复选中的 Pi 对话？", selected.map((e: any) => `${e.cwd} | ${e.name ?? e.sessionId}`).join("\n")))) return;
+		if (!(await ctx.ui.confirm("恢复选中的 Pi 对话？", selected.map(describe).join("\n")))) return;
 		const pre = preflightMod.preflight();
 		if (!pre.ok) {
 			for (const line of restore.summarize({ ok: false, stage: "preflight", checks: pre.checks })) {
@@ -214,39 +217,72 @@ export default async function (pi: ExtensionAPI) {
 			}
 			return;
 		}
-		let opened = 0;
-		for (const entry of selected) {
-			const claim = claims.claimSession(entry.sessionId, process.pid, paths);
-			if (!claim.claimed) continue;
-			const result = await spawn.openTab({
-				wezterm: pre.wezterm,
-				platform: pre.platform,
-				piCommand: pre.piCommand,
-				powershell: pre.powershell,
-				distro: pre.distro,
-				piBin: pre.piBin,
-				cwd: entry.cwd,
-				sessionFile: entry.sessionFile,
-			});
-			if (result.ok) {
-				await restore.setTitle({ wezterm: pre.wezterm, stdout: result.stdout, entry, env: process.env });
-				members.writeMember({
-					...entry,
-					pid: undefined,
-					processStart: undefined,
-					bootId: undefined,
-					ts: Date.now(),
-					platform: platform.runtimePlatform(process.env),
-					distro: process.env.WSL_DISTRO_NAME,
-					user: userInfo().username,
-				});
-				opened++;
-			} else {
-				claims.releaseClaim(entry.sessionId, paths);
-				ctx.ui.notify(`${entry.cwd}：WezTerm 请求失败 — ${result.error}`, "warning");
-			}
+		// 与 CLI 恢复共用同一把全局锁：/reopen recent 不能与批量恢复叠加成标签页风暴。
+		const lock = claims.acquireRestoreLock(paths, process.pid);
+		if (lock.locked) {
+			ctx.ui.notify("另一个恢复进程正在进行，本次未打开标签页", "warning");
+			return;
 		}
-		ctx.ui.notify(opened ? `已请求打开 ${opened} 个 pi 终端` : "没有打开任何标签页", opened ? "info" : "warning");
+		try {
+			const baseline = Date.now();
+			const requested: string[] = [];
+			for (const entry of selected) {
+				const claim = claims.claimSession(entry.sessionId, process.pid, paths);
+				if (!claim.claimed) continue;
+				const result = await spawn.openTab({
+					wezterm: pre.wezterm,
+					platform: pre.platform,
+					piCommand: pre.piCommand,
+					powershell: pre.powershell,
+					distro: pre.distro,
+					piBin: pre.piBin,
+					cwd: entry.cwd,
+					sessionFile: entry.sessionFile,
+				});
+				if (!result.ok) {
+					claims.releaseClaim(entry.sessionId, paths);
+					ctx.ui.notify(`${entry.cwd}：WezTerm 请求失败 — ${result.error}`, "warning");
+					continue;
+				}
+				await restore.setTitle({ wezterm: pre.wezterm, stdout: result.stdout, entry, env: process.env });
+				// 占位记录：即使新 Pi 没能启动，下次恢复也能重试这个会话。
+				// 已经有记录（新 Pi 已登记或此前残留）时不要覆盖，否则会把 pid 抹掉、
+				// 让 waitForMembers 永远等不到确认。
+				if (!members.readMember(entry.sessionId, paths)) {
+					members.writeMember({
+						...entry,
+						pid: undefined,
+						processStart: undefined,
+						bootId: undefined,
+						ts: Date.now(),
+						platform: platform.runtimePlatform(process.env),
+						distro: process.env.WSL_DISTRO_NAME,
+						user: userInfo().username,
+					});
+				}
+				requested.push(entry.sessionId);
+			}
+			// requirePid：占位记录不算确认，必须等真正的 Pi 进程登记。
+			const verification = hooks.noWait || !requested.length
+				? null
+				: await verify.waitForMembers(requested, {
+					paths,
+					timeoutMs: hooks.waitTimeoutMs ?? 15_000,
+					baseline,
+					requirePid: true,
+				});
+			const unverified = verification?.unverified ?? [];
+			for (const id of unverified) claims.releaseClaim(id, paths); // 未确认时允许立即重试
+			if (!requested.length) {
+				ctx.ui.notify("没有打开任何标签页", "warning");
+			} else if (unverified.length) {
+				ctx.ui.notify(`已请求打开 ${requested.length} 个 pi 终端；${unverified.length} 个超时未确认启动`, "warning");
+			} else {
+				ctx.ui.notify(`已请求打开 ${requested.length} 个 pi 终端${verification ? "，已确认启动" : ""}`, "info");
+			}
+		} finally {
+			claims.releaseRestoreLock(paths, process.pid);
+		}
 	}
 
 	async function runReopen(args: string, ctx: any): Promise<void> {
