@@ -29,7 +29,7 @@
 
 - 数据目录统一为 `~/.pi/agent/pi-reopen`；旧的 `pi-workspace/` 记录仍会读取、删除与清理。
 - 环境变量统一为 `PI_REOPEN_*`；旧名 `PI_WORKSPACE_*` 继续生效，canonical 优先。
-- `peerDependencies` 声明最低版本 `>=1.5.0`、不设上界，新版 Pi 仍可安装；运行时做能力检测，API 变更时显式告警，doctor 标注未测试的 Pi 主版本。
+- `peerDependencies` 只声明最低版本 `>=1.5.0`、不设上界，任何新版 Pi 都可直接安装；Pi 扩展 API 若变更，扩展会提示一次而不是静默停止登记。
 
 ### 架构与发布
 

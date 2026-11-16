@@ -159,10 +159,6 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"health.schema": { zh: "记录结构版本", en: "Record schema" },
 	"health.schemaDetail": { zh: "扩展 {ext} / CLI {cli}", en: "extension {ext} / CLI {cli}" },
 	"health.schemaHint": { zh: "扩展写出的记录结构比 CLI 新：请把 CLI 更新到同一版本（npm install -g），否则旧 CLI 会跳过新记录", en: "The extension writes a newer record schema than the CLI supports: update the CLI to the same version (npm install -g), otherwise newer records are skipped" },
-	"health.pi": { zh: "Pi 版本", en: "Pi version" },
-	"health.piDetail": { zh: "{version}（已测试主版本 {tested}.x）", en: "{version} (tested major {tested}.x)" },
-	"health.piUnknown": { zh: "无法从进程入口探测（不影响功能）", en: "could not detect from the process entry (does not affect functionality)" },
-	"health.piHint": { zh: "当前 Pi 主版本 {major} 尚未测试：功能按能力检测降级运行；遇到问题请反馈，或暂时使用 1.x", en: "Pi major {major} is untested: features degrade via capability checks; report issues, or stay on 1.x for now" },
 	"ext.apiIncompatible": {
 		zh: "pi-reopen：无法读取 Pi 的会话信息（扩展 API 可能已变更）。本次未登记，请更新 pi-reopen 或反馈此问题。",
 		en: "pi-reopen: cannot read Pi session info (the extension API may have changed). Nothing was registered; update pi-reopen or report this.",

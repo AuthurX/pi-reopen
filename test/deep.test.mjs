@@ -465,11 +465,6 @@ test('registry health detects a missing extension record and version drift', asy
   const future = healthChecks(registryHealth({ paths: f.paths, env: { ...f.env } }), 'en');
   assert.equal(future.find((c) => c.name === 'Record schema').ok, false, '扩展写出更新的记录结构必须告警');
 
-  writeExtensionRecord({ version: '1.0.0', schemaVersion: 2, piVersion: '2.1.0' }, f.paths);
-  const untested = healthChecks(registryHealth({ paths: f.paths, env: { ...f.env } }), 'en');
-  const piCheck = untested.find((c) => c.name === 'Pi version');
-  assert.equal(piCheck.ok, true, '更高的 Pi 主版本不阻止安装或运行');
-  assert.match(piCheck.hint, /untested/, '必须明确提示主版本未测试');
 });
 
 test('records with a newer schema are skipped and reported by list', async (t) => {
@@ -546,19 +541,6 @@ test('peer dependencies require a minimum Pi version without an upper bound', ()
   }
 });
 
-test('detectPiVersion walks up from the Pi entry to the host package', async (t) => {
-  const { detectPiVersion, piMajor } = await import('../src/piversion.js');
-  const f = fixture(t);
-  const pkgDir = join(f.home, 'node_modules', '@earendil-works', 'pi-coding-agent');
-  fs.mkdirSync(join(pkgDir, 'dist'), { recursive: true });
-  fs.writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: '@earendil-works/pi-coding-agent', version: '2.1.0' }));
-  const entry = join(pkgDir, 'dist', 'cli.js');
-  fs.writeFileSync(entry, '');
-  assert.equal(detectPiVersion({ entry }), '2.1.0');
-  assert.equal(detectPiVersion({ entry: join(f.home, 'nothing.js') }), undefined);
-  assert.equal(piMajor('2.1.0'), 2);
-  assert.equal(piMajor(undefined), undefined);
-});
 
 test('doctor reports registry health and explains an empty restore', async (t) => {
   const f = fixture(t);

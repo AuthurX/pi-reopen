@@ -56,7 +56,6 @@ export default async function (pi: ExtensionAPI) {
 	const preflightMod = await load("preflight.js");
 	const health = await load("health.js");
 	const version = await load("version.js");
-	const piversion = await load("piversion.js");
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
 
@@ -64,7 +63,6 @@ export default async function (pi: ExtensionAPI) {
 	try {
 		health.writeExtensionRecord({
 			version: version.packageVersion(),
-			piVersion: piversion.detectPiVersion(),
 			schemaVersion: members.MEMBER_SCHEMA,
 			platform: platform.runtimePlatform(process.env),
 			distro: process.env.WSL_DISTRO_NAME,

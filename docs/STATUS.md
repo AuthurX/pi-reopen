@@ -20,7 +20,7 @@
 - **i18n**：`src/i18n.js` 中英词表，CLI/doctor/扩展提示全部本地化，默认跟随 locale。
 - **doctor**：新增登记目录、扩展自述、版本一致性、记录结构检查；空登记给出 `/reload` 提示。
 - **扩展健壮性**：缓存进程身份、写失败单次提示、`session_info_changed` 刷新名称、宿主 API 读取包 try/catch。
-- **版本护栏**：peerDependencies 声明最低版本 `>=1.5.0`、不设上界（跟随最新 Pi）；运行时检测 `ctx.sessionManager` 能力，API 变更时告警一次；doctor 标注未测试的 Pi 主版本；更高 schema 的记录跳过并在 list/doctor 报告。
+- **版本策略**：peerDependencies 只声明最低版本 `>=1.5.0`、不设上界，新版 Pi 永远可安装；若 Pi 扩展 API 变更，登记前的能力检测会提示一次（不静默失效）；更高 schema 的记录跳过并在 list/doctor 报告。
 - **终端适配器**：`src/terminals/` + `docs/TERMINALS.md`，未知适配器预检失败。
 - **命名统一**：数据目录 `~/.pi/agent/pi-reopen`，变量 `PI_REOPEN_*`；旧目录/旧变量继续兼容。
 - **CI**：新增 `npm run verify-pack`、真实 Pi PTY 任务、`PI_REOPEN_INTEGRATION=1` 真实 WezTerm 测试；发布流程先校验 tarball。
