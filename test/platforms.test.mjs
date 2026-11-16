@@ -233,5 +233,7 @@ test('Windows PowerShell round-trips literal paths and session arguments', { ski
   const script = buildWindowsScript({ cwd, sessionFile, piCommand: [process.execPath, entry], env });
   const result = spawnSync(powershellPath(), powershellArgs(script), { env, encoding: 'utf8', timeout: 15000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(fs.readFileSync(output, 'utf8')), [cwd, cwd, '--session', sessionFile]);
+  const [actualCwd, ...args] = JSON.parse(fs.readFileSync(output, 'utf8'));
+  assert.equal(fs.realpathSync.native(actualCwd), fs.realpathSync.native(cwd));
+  assert.deepEqual(args, [cwd, '--session', sessionFile]);
 });
