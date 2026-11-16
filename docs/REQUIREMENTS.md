@@ -8,6 +8,7 @@
 - npm 包名：`@ellieyujin/pi-reopen`；许可证为 MIT，版权人为 `ellieyujin`。无 scope 的 `pi-workspace` 属于其他作者，见 `PUBLISHING.md`。
 - 外部入口：`pi-reopen`（无参数即恢复，`restore` 为显式写法；已实现，端到端验收仍待完成）。
 - 第一阶段环境：Windows WezTerm + Arch WSL。
+- 后续平台扩展：Linux / macOS / Windows 原生 + 本机 WezTerm，保留 WSL。恢复前先打开 WezTerm；平台依赖、验证状态与限制见 [PLATFORMS.md](PLATFORMS.md)。
 
 ## 已确认的恢复规则
 
@@ -39,7 +40,7 @@
 1. **触发方式**：第一版仅手动执行恢复命令；“打开终端自动恢复”留作后续可选功能，不在 P0。
 2. **空窗口**：从未发送过消息的 Pi 窗口没有对话文件，恢复时跳过，并在结果中提示跳过数量；不重建空终端。
 3. **旧记录迁移**：忽略旧原型产生的历史格式登记，不自动删除；新版本按新规则从零记录。提供 `clear` 方式手动清理，对话文件不受影响。
-4. **命令与入口**：外部命令为 `pi-reopen`（无参数即恢复；`list`、`doctor`、`clear` 均已实现）；Pi 内 `/all` 与 `Ctrl+Shift+O` 过渡期保留，行为与 CLI 对齐，共用同一恢复逻辑。
+4. **命令与入口**：外部命令为 `pi-reopen`（无参数即恢复；`list`、`doctor`、`clear` 均已实现）；Pi 内 `/reopen`（含 `recent`、`clear`）与 `Ctrl+Shift+O`，命名与外部 CLI 对齐，共用同一恢复逻辑。
 5. **标签页标题**：优先使用会话名（`/name` 设置过），否则使用工作目录的文件夹名。
 
 以上共 14 条规则构成需求基线；后续变更需更新本文档并同步测试。

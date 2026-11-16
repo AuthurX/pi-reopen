@@ -191,7 +191,7 @@ y += LH
 runs(LX, y, [
     ("  → ", TXT_DIM2, F_BODY_C),
     ("Pi 内等价入口：", TXT_DIM, F_BODY_C),
-    ("/all", CYAN, F_MED_C),
+    ("/reopen", CYAN, F_MED_C),
     ("  ·  ", TXT_DIM2, F_BODY_C),
     ("Ctrl+Shift+O", CYAN, F_MED_C),
 ])
@@ -213,7 +213,7 @@ install = "$ pi install npm:@ellieyujin/pi-reopen"
 iw = d.textlength(install, font=F_SMALL) / S
 ix = WX1 - 116 - iw
 d.text((s(ix), s(sy + 17)), install, font=F_SMALL, fill=TXT_DIM2 + (255,))
-desc = "restore WezTerm tabs from WSL"
+desc = "restore Pi in WezTerm tabs"
 dw = d.textlength(desc, font=F_SMALL) / S
 d.text((s((brand_end + ix - dw) / 2), s(sy + 17)), desc, font=F_SMALL, fill=TXT_DIM2 + (255,))
 

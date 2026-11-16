@@ -13,8 +13,8 @@ Pi 没有要求把源码上传到单独的 Pi 注册中心。分发有两条路�
 
 - **包名**：已确定为 `@ellieyujin/pi-reopen`，使用 npm 账户 `ellieyujin` 发布。无 scope 的 `pi-workspace` 属于其他作者，不是本项目。CLI 命令为 `pi-reopen`，与他人的 `pi-workspace` CLI 不冲突。
 - **许可证**：已选择 [MIT](../LICENSE)，版权人为 `ellieyujin`；`package.json.license` 已声明为 `MIT`，发布包须包含完整 LICENSE。
-- **版本**：`0.2.0` 正式版（2026-11-13 验收后发布），`publishConfig.tag` 为 `latest`；开发预览版用 `--preid=dev` 发布到 `next`。已发布的同名同版本不能重复发布。
-- **功能验收**：仍需真实 WezTerm 多窗口关闭/重开验收；启动声明不是跨进程原子锁，不能宣称并发恢复绝无重复。先作为预览分享，不把打包成功当成完整功能验收。
+- **版本**：`0.3.0` 正式版，`publishConfig.tag` 为 `latest`。已发布的同名同版本不能重复发布。
+- **功能验收**：0.2.0 已完成 WSL 恢复验收；0.3.0 新增平台必须通过三平台 CI，macOS/Windows 真实 WezTerm 关窗与恢复仍待实机验收。维护者选择正式发布，但这不代表完整 GUI 验收已完成。启动声明不是跨进程原子锁，不能宣称并发恢复绝无重复。
 - **工作树**：核对所有未提交修改（含原有修改），不要把未审查内容一起提交。本文不自动提交、推送或发布。
 
 ## 本地检查
@@ -31,7 +31,13 @@ PTY 测试需要已安装 Pi；它只用临时配置测试信号退出与主动�
 
 打包实物也应在临时目录解压后测试 CLI 和 Pi 扩展，且不设置 `PI_WORKSPACE_SRC`，避免本机源码兜底掩盖漏打包。
 
-## 首次 npm 发布
+## GitHub 自动发布（当前使用）
+
+更新版本并提交后，推送 main 和对应的 `v<版本号>` tag。`.github/workflows/release.yaml` 调用同一提交的三平台测试工作流；所有检查通过后，核对 tag 与 package 版本、检查打包清单，再通过已配置的 npm trusted publishing 发布并创建 GitHub Release。任一平台失败均阻止发布，无需复制 npm token。
+
+正式 tag（例如 `v0.3.0`）发布到 `latest`；带预发布后缀的 tag 才发布到 `next`。不要重写或移动已经发布的 tag。
+
+## 首次 npm 发布（手动备用）
 
 以下命令在仓库根目录由维护者确认后手动运行。已登录时无需重复登录；`whoami` 应输出 `ellieyujin`：
 
@@ -45,14 +51,14 @@ npm view @ellieyujin/pi-reopen --registry=https://registry.npmjs.org/
 
 `npm view` 返回现有包时需核对所有者权限；404 只说明查询时没找到，最终是否允许该名称仍由 registry 判断。不要把 token、密码或 2FA 验证码写入仓库或聊天。
 
-直接发布需要 npm 账户开启 2FA，或使用有发布权限且允许 bypass 2FA 的 granular access token。手动首次发布推荐浏览器登录与 2FA；后续 CI 可研究 npm trusted publishing，不要复制旧的长期 token 教程。
+直接发布需要 npm 账户开启 2FA，或使用有发布权限且允许 bypass 2FA 的 granular access token。手动发布推荐浏览器登录与 2FA；本仓库 CI 已使用 npm trusted publishing，不要复制旧的长期 token 教程。
 
 ```bash
 npm test
 npm pack --dry-run
-npm publish --dry-run --access public --tag next
-# 确认名称、许可、版本、文件清单和测试结果后，才执行真正发布：
-npm publish --access public --tag next
+npm publish --dry-run --access public --tag latest
+# 确认名称、许可、版本、文件清单和三平台测试结果后，才执行真正发布：
+npm publish --access public --tag latest
 ```
 
 `prepublishOnly` 会再次运行测试。`--dry-run` 不上传包，也不能证明账户具备真实发布权限。
@@ -60,15 +66,15 @@ npm publish --access public --tag next
 ## 发布后的安装验证
 
 ```bash
-npm view @ellieyujin/pi-reopen@next name version repository dist-tags --registry=https://registry.npmjs.org/
-pi install npm:@ellieyujin/pi-reopen@next
-npm install -g @ellieyujin/pi-reopen@next --omit=peer
+npm view @ellieyujin/pi-reopen@latest name version repository dist-tags --registry=https://registry.npmjs.org/
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
 - `pi install` 管理扩展资源；外部 CLI 用 npm 全局安装，并确认全局 bin 在 PATH。
 - 使用 `--omit=peer` 避免 CLI 安装额外的 Pi 宿主副本；扩展运行时由 Pi 提供声明的 peer 包。
-- 在新 Pi 会话中检查 `/all` 命令和登记；已有会话需要 `/reload` 或重启。
+- 在新 Pi 会话中检查 `/reopen` 命令和登记；已有会话需要 `/reload` 或重启。
 - 仅保留一个扩展加载入口，不要把旧手工符号链接、Git 安装和 npm 安装同时启用。
 - Pi 目录未立即出现时先确认公开包、关键词、manifest 和实际安装是否正常。目录索引与 npm 安装是两件事。
 
@@ -76,12 +82,12 @@ pi-reopen doctor
 
 ```bash
 # 维护者：使用新的版本号；此命令不会自动创建 Git commit/tag。
-npm version prerelease --preid=dev --no-git-tag-version
-npm publish --access public --tag next
+npm version patch --no-git-tag-version
+# 审查并提交版本改动后，推送对应版本 tag，交由上述 CI 发布。
 
 # 使用者：Pi 扩展和 CLI 分别更新。
-pi update npm:@ellieyujin/pi-reopen@next
-npm install -g @ellieyujin/pi-reopen@next --omit=peer
+pi update npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 ```
 
 完成验收并决定发布稳定版后，设置非 prerelease 版本，并把 `publishConfig.tag` 改为 `latest`，发布时也显式指定 `--tag latest`。不要直接沿用开发版的 `next` 配置。固定版本/tag/commit 的 Pi 安装不会自动跟随其他版本，需要改用新的来源版本。
