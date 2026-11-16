@@ -37,7 +37,7 @@ async function loadRecent(t) {
     '  appendFileSync(process.env.PI_WORKSPACE_TEST_CALLS, JSON.stringify(args) + "\\n");',
     '  if (String(args.cwd).includes("FAIL")) return { ok: false, error: "stub failure" };',
     '  if (process.env.PI_WORKSPACE_TEST_REGISTER === "1") {',
-    '    const id = String(args.sessionFile).split("/").pop().replace(/\.jsonl$/, "");',
+    '    const id = String(args.sessionFile).split(/[\\/]/).pop().replace(/\.jsonl$/, "");',
     '    writeMember({ sessionId: id, cwd: args.cwd, sessionFile: args.sessionFile, ts: Date.now(),',
     '      pid: process.pid, processStart: processStart(process.pid), bootId: currentBootId() });',
     '  }',
