@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { workspacePaths } from '../src/paths.js';
 import { isLive, processStart } from '../src/liveness.js';
@@ -15,6 +16,7 @@ import { runRestore, summarize } from '../src/restore.js';
 import { run as cliRun, displayWidth } from '../src/cli.js';
 
 /** 需要 /run/WSL 互操作的测试仅在 WSL 内运行（CI 为普通 Linux，跳过）。 */
+const project = dirname(dirname(fileURLToPath(import.meta.url)));
 const ON_WSL = fs.existsSync('/run/WSL');
 const wslOnly = { skip: ON_WSL ? false : '仅 WSL（需 /run/WSL 互操作）' };
 
@@ -74,6 +76,22 @@ test('claimSession: same owner reclaims; dead holder within TTL is reclaimable',
   holder.kill('SIGKILL');
   await new Promise((r) => holder.once('exit', r));
   assert.equal(claimSession('s2', process.pid, f.paths).claimed, true, '持有者已死时即使未过期也可接管');
+});
+
+test('restore lock is created atomically: concurrent processes cannot all win', async (t) => {
+  const f = fixture(t);
+  fs.mkdirSync(f.paths.workspace, { recursive: true });
+  const go = join(f.home, 'go');
+  const markers = Array.from({ length: 8 }, (_, i) => join(f.home, `winner-${i}`));
+  const children = markers.map((marker) => spawn(process.execPath,
+    [join(project, 'test/fixtures/lock-race.mjs'), f.paths.workspace, marker, go],
+    { stdio: 'ignore' }));
+  const exited = children.map((child) => new Promise((resolve) => child.once('exit', resolve)));
+  fs.writeFileSync(go, '');
+  await Promise.all(exited);
+  const winners = markers.filter((marker) => fs.existsSync(marker));
+  assert.equal(winners.length, 1, `应只有一个进程获得锁，实际 ${winners.length} 个`);
+  assert.equal(fs.existsSync(join(f.paths.workspace, 'restore.lock')), false, '持有者退出后锁应释放');
 });
 
 test('sweepClaims removes expired and dead-holder claims, keeps fresh live and corrupt ones', async (t) => {
