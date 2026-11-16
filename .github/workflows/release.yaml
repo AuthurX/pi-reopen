@@ -10,8 +10,15 @@ permissions:
   id-token: write # npm provenance / trusted publishing (OIDC)
 
 jobs:
+  test:
+    name: Release checks
+    uses: ./.github/workflows/test.yaml
+    permissions:
+      contents: read
+
   publish:
     name: Publish to npm
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Check out release tag
@@ -35,8 +42,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-fund --no-audit
 
-      - name: Test
-        run: npm test
+      - name: Check package contents
+        run: npm pack --dry-run
 
       - name: Publish to npm
         run: |
