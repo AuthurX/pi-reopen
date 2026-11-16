@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import { binfmtStatus, persistHint } from "./binfmt.js";
+import { healthChecks, registryHealth } from "./health.js";
 import { resolveLang, t } from "./i18n.js";
 import { workspacePaths } from "./paths.js";
 import { currentBootId, isLive } from "./liveness.js";
@@ -240,7 +241,9 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 		}
 		case "doctor": {
 			const pre = preflight({ env, lang });
-			for (const check of pre.checks) {
+			const health = registryHealth({ paths: workspacePaths(env), env });
+			const checks = [...pre.checks, ...healthChecks(health, lang)];
+			for (const check of checks) {
 				write(t(lang, "cli.doctorCheck", { mark: check.ok ? "✔" : "✖", name: check.name, detail: check.detail }));
 				if (check.hint) write(t(lang, "restore.hint", { hint: check.hint }));
 			}
@@ -249,8 +252,9 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 				write(t(lang, "cli.binfmtWarning"));
 				for (const line of persistHint(lang).split("\n")) write(`  ${line}`);
 			}
-			write(pre.ok ? t(lang, "cli.doctorReady") : t(lang, "cli.doctorBlocked"));
-			return pre.ok ? 0 : 2;
+			const ok = checks.every((check) => check.ok);
+			write(ok ? t(lang, "cli.doctorReady") : t(lang, "cli.doctorBlocked"));
+			return ok ? 0 : 2;
 		}
 		case "forget": {
 			const targets = flags.filter((flag) => !flag.startsWith("-"));

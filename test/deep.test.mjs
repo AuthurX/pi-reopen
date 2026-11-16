@@ -440,6 +440,61 @@ test('default verification window scales with the batch size', () => {
   assert.equal(defaultWaitTimeoutMs(100), 90_000, '窗口有上限，避免无限等待');
 });
 
+test('registry health detects a missing extension record and version drift', async (t) => {
+  const { healthChecks, registryHealth, writeExtensionRecord } = await import('../src/health.js');
+  const f = fixture(t);
+  const empty = registryHealth({ paths: f.paths, env: { ...f.env } });
+  assert.equal(empty.dirExists, false);
+  let checks = healthChecks(empty, 'en');
+  assert.equal(checks.find((c) => c.name === 'Registry directory').ok, false);
+  assert.equal(checks.find((c) => c.name === 'Extension loaded').ok, false);
+
+  writeMember({ ...liveEntry(f.paths, 'health-entry'), pid: undefined }, f.paths);
+  writeExtensionRecord({ version: '0.0.1', ts: Date.now() }, f.paths);
+  const healthy = registryHealth({ paths: f.paths, env: { ...f.env } });
+  assert.equal(healthy.dirExists, true);
+  assert.equal(healthy.writable, true);
+  assert.equal(healthy.memberCount, 1);
+  assert.ok(healthy.lastRegisteredAt);
+  checks = healthChecks(healthy, 'en');
+  const versionCheck = checks.find((c) => c.name === 'Version match');
+  assert.equal(versionCheck.ok, false, 'CLI 与扩展版本不一致必须暴露出来');
+  assert.match(versionCheck.hint, /differ/);
+});
+
+test('doctor reports registry health and explains an empty restore', async (t) => {
+  const f = fixture(t);
+  const out = [];
+  const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
+  // 预检需要可执行的 WezTerm 与 pi；用脚本夹具让本用例与真实环境无关。
+  const bin = join(f.home, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const wez = join(bin, 'wezterm');
+  fs.writeFileSync(wez, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "wezterm 1.0"; exit 0; fi\necho "[]"\n');
+  fs.chmodSync(wez, 0o755);
+  const piPath = join(bin, 'pi');
+  fs.writeFileSync(piPath, '#!/bin/sh\nexit 0\n');
+  fs.chmodSync(piPath, 0o755);
+  const env = {
+    HOME: f.home,
+    PATH: `${bin}:/usr/bin:/bin`,
+    PI_WORKSPACE_LANG: 'zh',
+    PI_CODING_AGENT_DIR: f.paths.agent,
+    PI_WORKSPACE_WEZTERM: wez,
+    PI_WORKSPACE_PI_BIN: piPath,
+  };
+  // WSL 上预检要求发行版名；普通 Linux CI 不设置（否则会被判成 WSL 而缺少 /run/WSL）。
+  if (fs.existsSync('/run/WSL')) env.WSL_DISTRO_NAME = 'Arch';
+  const code = await cliRun(['doctor'], { stdout, env });
+  assert.equal(code, 2, '扩展未加载时 doctor 必须失败，而不是显示“环境就绪”');
+  assert.match(out.join('\n'), /登记目录/);
+  assert.match(out.join('\n'), /扩展加载/);
+  out.length = 0;
+  assert.equal(await cliRun(['restore', '--dry-run'], { stdout, env }), 0);
+  assert.match(out.join('\n'), /待恢复 0 个/);
+  assert.match(out.join('\n'), /\/reload/, '空登记时必须给出“刚安装”的下一步');
+});
+
 test('i18n: language follows the environment and reports localize', async (t) => {
   const { resolveLang, t: translate } = await import('../src/i18n.js');
   assert.equal(resolveLang({ PI_WORKSPACE_LANG: 'en' }), 'en');

@@ -59,6 +59,15 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
     hooks: (await import(pathToFileURL(join(project, 'test', 'fixtures', 'test-hooks.mjs')))) };
 }
 
+test('extension writes a self-record so doctor can detect it', async (t) => {
+  const f = await loadExtension(t);
+  const record = JSON.parse(fs.readFileSync(join(f.agentDir, 'pi-workspace', 'extension.json'), 'utf8'));
+  assert.match(record.version, /^\d+\.\d+\.\d+/);
+  assert.equal(record.schemaVersion, 2);
+  assert.ok(record.ts > 0);
+  assert.equal(record.pid, process.pid);
+});
+
 test('extension registers command/shortcut; only tui mode records members', async (t) => {
   const f = await loadExtension(t);
   assert.ok(f.commands.reopen, '/reopen must be registered');

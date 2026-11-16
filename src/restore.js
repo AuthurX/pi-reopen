@@ -225,6 +225,7 @@ export function summarize(result, lang = resolveLang()) {
 	const skippedText = skippedList ? t(lang, "restore.skipped", { list: skippedList }) : "";
 	if (result.stage === "dry-run") {
 		lines.push(t(lang, "restore.dryRunHeader", { n: result.plan.restorable.length, skipped: skippedText }));
+		if (!result.plan.items.length) lines.push(t(lang, "restore.emptyHint"));
 		for (const item of result.plan.restorable) {
 			lines.push(t(lang, "restore.dryRunItem", { title: item.entry.name || item.entry.sessionId, cwd: item.entry.cwd }));
 		}
@@ -249,6 +250,7 @@ export function summarize(result, lang = resolveLang()) {
 	const processed = result.results.filter((r) => r.requested || r.requestError !== undefined || r.aborted).length;
 	if (!processed) {
 		lines.push(t(lang, "restore.none", { skipped: skippedText }));
+		if (!result.plan.items.length) lines.push(t(lang, "restore.emptyHint"));
 	} else {
 		lines.push(t(lang, "restore.processed", {
 			n: processed,

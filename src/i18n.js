@@ -139,6 +139,27 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"spawn.unsupportedPlatform": { zh: "不支持的平台：{platform}", en: "Unsupported platform: {platform}" },
 	"windows.noPiCommand": { zh: "Windows Pi 启动命令未经预检", en: "Windows Pi command was not preflighted" },
 
+	// 登记健康度
+	"health.registry": { zh: "登记目录", en: "Registry directory" },
+	"health.notWritable": { zh: "不可写", en: "not writable" },
+	"health.registryMissing": { zh: "尚未创建", en: "not created yet" },
+	"health.registryHint": { zh: "登记目录不可写；检查权限或 PI_CODING_AGENT_DIR", en: "Registry directory is not writable; check permissions or PI_CODING_AGENT_DIR" },
+	"health.registryMissingHint": { zh: "目录会在扩展首次登记时创建；确认 pi install 已生效并在 Pi 中 /reload", en: "The directory is created on first registration; verify pi install took effect and run /reload in Pi" },
+	"health.extension": { zh: "扩展加载", en: "Extension loaded" },
+	"health.extensionDetail": { zh: "v{version} · {ts}", en: "v{version} · {ts}" },
+	"health.extensionMissing": { zh: "未发现扩展自述文件", en: "no extension record found" },
+	"health.extensionHint": { zh: "扩展未加载或未安装：在每个已打开的 Pi 中执行 /reload（或重启），并确认 pi list 中只有一份 pi-reopen", en: "Extension is not loaded/installed: run /reload (or restart) in each open Pi and make sure pi list has exactly one pi-reopen entry" },
+	"health.version": { zh: "版本一致性", en: "Version match" },
+	"health.versionDetail": { zh: "CLI {cli} / 扩展 {ext}", en: "CLI {cli} / extension {ext}" },
+	"health.versionHint": { zh: "CLI 与扩展版本不一致：分别更新 pi install 与 npm install -g，保持同一版本", en: "CLI and extension versions differ: update both pi install and npm install -g to the same version" },
+	"health.members": { zh: "登记成员", en: "Registered members" },
+	"health.membersDetail": { zh: "{n} 条 · 最近登记 {last}", en: "{n} record(s) · last registration {last}" },
+	"health.membersHint": { zh: "还没有登记：安装扩展后在每个 Pi 中执行 /reload，发出首条消息即会登记", en: "Nothing registered yet: after installing the extension run /reload in each Pi; the first user message registers it" },
+	"restore.emptyHint": {
+		zh: "如果你刚安装：在每个已打开的 Pi 中执行 /reload（或重启）后才会开始登记；从未发过消息的窗口不会登记。",
+		en: "If you just installed: run /reload (or restart) in each open Pi to start recording; windows that never sent a message are not recorded.",
+	},
+
 	// 预检
 	"pf.platform": { zh: "运行平台", en: "Platform" },
 	"pf.platformHint": { zh: "支持 Linux、macOS、Windows 和 WSL", en: "Supported: Linux, macOS, Windows and WSL" },

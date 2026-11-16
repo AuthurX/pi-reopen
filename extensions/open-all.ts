@@ -47,8 +47,26 @@ export default async function (pi: ExtensionAPI) {
 	const i18n = await load("i18n.js");
 	const lang = i18n.resolveLang(process.env);
 	const preflightMod = await load("preflight.js");
+	const health = await load("health.js");
+	const version = await load("version.js");
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
+
+	// 供 doctor 判断“扩展是否真的加载了”，以及 CLI/扩展版本是否一致。
+	try {
+		health.writeExtensionRecord({
+			version: version.packageVersion(),
+			schemaVersion: members.MEMBER_SCHEMA,
+			platform: platform.runtimePlatform(process.env),
+			distro: process.env.WSL_DISTRO_NAME,
+			user: userInfo().username,
+			pid: process.pid,
+			ts: Date.now(),
+			node: process.version,
+		}, paths);
+	} catch {
+		/* 诊断信息写失败不应影响登记 */
+	}
 
 	let currentSessionId: string | undefined;
 	let signalExit = false;
