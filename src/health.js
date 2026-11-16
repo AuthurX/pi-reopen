@@ -1,7 +1,7 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveLang, t } from "./i18n.js";
-import { listMembers } from "./members.js";
+import { MEMBER_SCHEMA, listMembers } from "./members.js";
 import { workspacePaths } from "./paths.js";
 import { packageVersion } from "./version.js";
 
@@ -79,6 +79,13 @@ export function healthChecks(health, lang = resolveLang(health.env)) {
 		!ext || !ext.version || ext.version === health.cliVersion,
 		t(lang, "health.versionDetail", { cli: health.cliVersion, ext: ext?.version ?? "-" }),
 		t(lang, "health.versionHint"),
+	);
+
+	add(
+		t(lang, "health.schema"),
+		!ext || !Number.isInteger(ext.schemaVersion) || ext.schemaVersion <= MEMBER_SCHEMA,
+		t(lang, "health.schemaDetail", { ext: ext?.schemaVersion ?? "-", cli: MEMBER_SCHEMA }),
+		t(lang, "health.schemaHint"),
 	);
 
 	add(

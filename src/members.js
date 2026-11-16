@@ -46,23 +46,37 @@ export function deleteMember(sessionId, paths = workspacePaths()) {
 	}
 }
 
-export function listMembers(paths = workspacePaths()) {
-	const out = [];
+/**
+ * 读取全部成员；比本版本更新的记录结构（schemaVersion 更大）不参与恢复，
+ * 否则旧 CLI 会按错误的字段含义去启动会话。返回 unsupported 数量供诊断。
+ */
+export function readMembers(paths = workspacePaths()) {
+	const members = [];
+	let unsupported = 0;
 	let files;
 	try {
 		files = readdirSync(paths.members);
 	} catch {
-		return out;
+		return { members, unsupported };
 	}
 	for (const file of files.filter((f) => f.endsWith(".json"))) {
 		try {
 			const entry = JSON.parse(readFileSync(join(paths.members, file), "utf8"));
-			if (entry?.sessionId) out.push(entry);
+			if (!entry?.sessionId) continue;
+			if (Number.isInteger(entry.schemaVersion) && entry.schemaVersion > MEMBER_SCHEMA) {
+				unsupported++;
+				continue;
+			}
+			members.push(entry);
 		} catch {
 			/* 跳过损坏记录，恢复时宁可少报不可错报 */
 		}
 	}
-	return out.sort((a, b) => a.ts - b.ts);
+	return { members: members.sort((a, b) => a.ts - b.ts), unsupported };
+}
+
+export function listMembers(paths = workspacePaths()) {
+	return readMembers(paths).members;
 }
 
 /** 清空登记与启动占用；不触碰旧格式文件与对话文件。 */

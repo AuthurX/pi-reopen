@@ -1,5 +1,5 @@
 import { acquireRestoreLock, activeClaim, claimSession, releaseRestoreLock, sweepClaims } from "./claims.js";
-import { listMembers } from "./members.js";
+import { readMembers } from "./members.js";
 import { buildRestorePlan } from "./plan.js";
 import { preflight } from "./preflight.js";
 import { openTab } from "./spawn.js";
@@ -26,7 +26,7 @@ export function tabTitle(entry) {
 
 /** 只读：列出全部成员与状态（list / dry-run 共用）。 */
 export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs, only } = {}) {
-	const members = listMembers(paths);
+	const { members, unsupported } = readMembers(paths);
 	const plan = buildRestorePlan({
 		members,
 		paths,
@@ -39,7 +39,7 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 		maxAgeMs: maxAgeMs ?? maxAgeMsFromEnv(env),
 		only,
 	});
-	return { members, plan };
+	return { members, plan, unsupported };
 }
 
 /** 开完标签页后设置标题；失败只影响外观，不影响恢复结果。 */

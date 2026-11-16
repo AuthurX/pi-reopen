@@ -121,6 +121,7 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"cli.doctorBlocked": { zh: "存在未通过项，恢复前需先解决。", en: "Unresolved checks; fix them before restoring." },
 	"cli.doctorCheck": { zh: "{mark} {name}：{detail}", en: "{mark} {name}: {detail}" },
 	"cli.binfmtWarning": { zh: "⚠ WSLInterop 已注册但未持久化：", en: "⚠ WSLInterop is registered but not persisted:" },
+	"cli.listUnsupported": { zh: "⚠ 有 {n} 条记录的结构版本比当前 CLI 新，已跳过；请更新 CLI。", en: "⚠ {n} record(s) use a newer schema than this CLI and were skipped; update the CLI." },
 	"cli.listEmpty": {
 		zh: "没有登记成员。关闭 WezTerm 时仍打开的 Pi 会在下次启动后自动登记。",
 		en: "No registered members. Pis still open when WezTerm closes are recorded on their next start.",
@@ -152,6 +153,9 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"health.version": { zh: "版本一致性", en: "Version match" },
 	"health.versionDetail": { zh: "CLI {cli} / 扩展 {ext}", en: "CLI {cli} / extension {ext}" },
 	"health.versionHint": { zh: "CLI 与扩展版本不一致：分别更新 pi install 与 npm install -g，保持同一版本", en: "CLI and extension versions differ: update both pi install and npm install -g to the same version" },
+	"health.schema": { zh: "记录结构版本", en: "Record schema" },
+	"health.schemaDetail": { zh: "扩展 {ext} / CLI {cli}", en: "extension {ext} / CLI {cli}" },
+	"health.schemaHint": { zh: "扩展写出的记录结构比 CLI 新：请把 CLI 更新到同一版本（npm install -g），否则旧 CLI 会跳过新记录", en: "The extension writes a newer record schema than the CLI supports: update the CLI to the same version (npm install -g), otherwise newer records are skipped" },
 	"health.members": { zh: "登记成员", en: "Registered members" },
 	"health.membersDetail": { zh: "{n} 条 · 最近登记 {last}", en: "{n} record(s) · last registration {last}" },
 	"health.membersHint": { zh: "还没有登记：安装扩展后在每个 Pi 中执行 /reload，发出首条消息即会登记", en: "Nothing registered yet: after installing the extension run /reload in each Pi; the first user message registers it" },

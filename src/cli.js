@@ -237,6 +237,7 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 				lang,
 			});
 			for (const line of lines) write(line);
+			if (inspected.unsupported) write(t(lang, "cli.listUnsupported", { n: inspected.unsupported }));
 			return 0;
 		}
 		case "doctor": {

@@ -41,8 +41,8 @@
     "image": "https://raw.githubusercontent.com/AuthurX/pi-workspace/main/assets/preview.png"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*"
+    "@earendil-works/pi-coding-agent": ">=1.5.0 <2.0.0",
+    "@earendil-works/pi-tui": ">=1.5.0 <2.0.0"
   },
   "bin": {
     "pi-reopen": "bin/pi-reopen.js"

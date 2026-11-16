@@ -460,6 +460,32 @@ test('registry health detects a missing extension record and version drift', asy
   const versionCheck = checks.find((c) => c.name === 'Version match');
   assert.equal(versionCheck.ok, false, 'CLI 与扩展版本不一致必须暴露出来');
   assert.match(versionCheck.hint, /differ/);
+
+  writeExtensionRecord({ version: '0.0.1', schemaVersion: 99 }, f.paths);
+  const future = healthChecks(registryHealth({ paths: f.paths, env: { ...f.env } }), 'en');
+  assert.equal(future.find((c) => c.name === 'Record schema').ok, false, '扩展写出更新的记录结构必须告警');
+});
+
+test('records with a newer schema are skipped and reported by list', async (t) => {
+  const f = fixture(t);
+  writeMember({ ...liveEntry(f.paths, 'current-schema'), pid: undefined }, f.paths);
+  fs.writeFileSync(join(f.paths.members, 'future.json'),
+    JSON.stringify({ sessionId: 'future', schemaVersion: 99, ts: Date.now() }));
+  const inspected = inspect({ paths: f.paths, owners: new Map() });
+  assert.equal(inspected.unsupported, 1);
+  assert.equal(inspected.plan.items.length, 1, '未来版本的记录不参与恢复');
+  const out = [];
+  const stdout = { write: (line) => out.push(line), on: () => {}, columns: 200 };
+  await cliRun(['list'], { stdout, env: { ...f.env, PI_CODING_AGENT_DIR: f.paths.agent } });
+  assert.match(out.join('\n'), /结构版本比当前 CLI 新/);
+});
+
+test('peer dependencies stay inside a bounded major range', () => {
+  const pkg = JSON.parse(fs.readFileSync(join(project, 'package.json'), 'utf8'));
+  for (const [name, range] of Object.entries(pkg.peerDependencies)) {
+    assert.notEqual(range, '*', `${name} 必须有上界，避免 Pi 主版本升级时静默失效`);
+    assert.match(range, /<\d+/, `${name} 必须有上界`);
+  }
 });
 
 test('doctor reports registry health and explains an empty restore', async (t) => {
