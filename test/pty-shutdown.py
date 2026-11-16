@@ -26,12 +26,12 @@ def check(action):
         session = root / 'fixture.jsonl'
         session.write_text(json.dumps({'type': 'session', 'version': 3, 'id': sid,
                                       'timestamp': '2026-01-01T00:00:00.000Z', 'cwd': tmp}) + '\n')
-        record = agent / 'pi-workspace' / 'members' / (sid + '.json')
+        record = agent / 'pi-reopen' / 'members' / (sid + '.json')
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(tmp)
             env = dict(os.environ, HOME=tmp, PI_CODING_AGENT_DIR=str(agent), TERM='xterm-256color')
-            for key in ['PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_CODING_AGENT_SESSION_DIR']:
+            for key in ['PI_REOPEN_HOOKS', 'PI_REOPEN_SRC', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_CODING_AGENT_SESSION_DIR']:
                 env.pop(key, None)
             os.execve(pi, [pi, '--offline', '--no-extensions', '--no-mcp', '--no-skills',
                            '--no-context-files', '--no-approve', '--extension',
@@ -71,7 +71,7 @@ def check(action):
             assert record.exists() == expected, f'{action}: member exists={record.exists()}, expected={expected}'
             if expected:
                 import subprocess
-                env = dict(os.environ, PI_CODING_AGENT_DIR=str(agent))
+                env = dict(os.environ, PI_CODING_AGENT_DIR=str(agent), PI_REOPEN_LANG='zh')
                 result = subprocess.run(['node', str(project / 'bin/pi-reopen.js'), 'list'],
                                         env=env, capture_output=True, text=True, timeout=10)
                 assert result.returncode == 0 and '待恢复' in result.stdout, result.stdout + result.stderr

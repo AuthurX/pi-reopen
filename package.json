@@ -50,6 +50,8 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "test:platform": "node --test test/platforms.test.mjs test/extension.test.mjs test/recent.test.mjs",
+    "test:integration": "PI_REOPEN_INTEGRATION=1 node --test test/integration.test.mjs",
+    "verify-pack": "node scripts/verify-pack.mjs",
     "prepublishOnly": "npm test"
   }
 }
