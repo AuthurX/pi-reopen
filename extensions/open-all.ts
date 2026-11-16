@@ -44,7 +44,7 @@ export default async function (pi: ExtensionAPI) {
 
 	let currentSessionId: string | undefined;
 	let signalExit = false;
-	const signals = process.platform === "win32" ? ["SIGTERM"] as const : ["SIGHUP", "SIGTERM"] as const;
+	const signals = ["SIGHUP", "SIGTERM"] as const;
 	const markSignalExit = () => { signalExit = true; };
 	function detachSignals(): void {
 		for (const signal of signals) process.off(signal, markSignalExit);
@@ -189,6 +189,9 @@ export default async function (pi: ExtensionAPI) {
 			if (!claim.claimed) continue;
 			const result = await spawn.openTab({
 				wezterm: pre.wezterm,
+				platform: pre.platform,
+				piCommand: pre.piCommand,
+				powershell: pre.powershell,
 				distro: pre.distro,
 				piBin: pre.piBin,
 				cwd: entry.cwd,
@@ -205,21 +208,32 @@ export default async function (pi: ExtensionAPI) {
 		ctx.ui.notify(opened ? `已请求打开 ${opened} 个 pi 终端` : "没有打开任何标签页", opened ? "info" : "warning");
 	}
 
+	async function runReopen(args: string, ctx: any): Promise<void> {
+		const arg = (args ?? "").trim();
+		if (arg === "clear") {
+			const removed = members.clearWorkspace(paths);
+			ctx.ui.notify(`已清空 ${removed} 条登记；对话文件未删除`, "info");
+			return;
+		}
+		if (arg === "recent") return openRecent(ctx);
+		if (arg) {
+			ctx.ui.notify("用法：/reopen | /reopen recent | /reopen clear", "warning");
+			return;
+		}
+		await restoreAndReport(ctx);
+	}
+
+	pi.registerCommand("reopen", {
+		description: "恢复已登记的 pi 终端（/reopen recent 补选历史；/reopen clear 清空登记）",
+		handler: (args: string, ctx: any) => runReopen(args, ctx),
+	});
+
+	// 过渡期别名：/all 已改名为 /reopen，行为不变
 	pi.registerCommand("all", {
-		description: "恢复已登记的 pi 终端（/all recent 补选历史；/all clear 清空登记）",
+		description: "（已改名为 /reopen）恢复已登记的 pi 终端",
 		handler: async (args: string, ctx: any) => {
-			const arg = (args ?? "").trim();
-			if (arg === "clear") {
-				const removed = members.clearWorkspace(paths);
-				ctx.ui.notify(`已清空 ${removed} 条登记；对话文件未删除`, "info");
-				return;
-			}
-			if (arg === "recent") return openRecent(ctx);
-			if (arg) {
-				ctx.ui.notify("用法：/all | /all recent | /all clear", "warning");
-				return;
-			}
-			await restoreAndReport(ctx);
+			ctx.ui.notify("/all 已改名为 /reopen", "warning");
+			await runReopen(args, ctx);
 		},
 	});
 

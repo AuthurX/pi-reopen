@@ -1,17 +1,51 @@
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { powershellArgs, powershellPath } from "./platform.js";
 
-/** 当前 Linux/WSL 启动 ID；重启后变化。 */
-export function currentBootId(readFile = (p) => readFileSync(p, "utf8")) {
+const readText = (p) => readFileSync(p, "utf8");
+function query(program, args, execFile) {
+	return String(execFile(program, args, {
+		encoding: "utf8", timeout: 8000, windowsHide: true,
+		env: { ...process.env, LC_ALL: "C" },
+	})).trim();
+}
+let cachedBootId;
+
+/** Stable boot identity; cache only the successful native query in this process. */
+export function currentBootId(readFile = readText, { platform = process.platform, execFile = execFileSync } = {}) {
 	try {
-		return readFile("/proc/sys/kernel/random/boot_id").trim();
+		if (platform === "linux") return readFile("/proc/sys/kernel/random/boot_id").trim() || undefined;
+		if (execFile === execFileSync && cachedBootId) return cachedBootId;
+		let boot;
+		if (platform === "darwin") {
+			const value = query("/usr/sbin/sysctl", ["-n", "kern.boottime"], execFile);
+			const match = /sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)/.exec(value);
+			if (match) boot = `darwin:${match[1]}:${match[2]}`;
+		} else if (platform === "win32") {
+			const value = query(powershellPath(), powershellArgs("$ErrorActionPreference = 'Stop'; (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().Ticks.ToString()"), execFile);
+			if (/^\d+$/.test(value)) boot = `win32:${value}`;
+		}
+		if (execFile === execFileSync && boot) cachedBootId = boot;
+		return boot;
 	} catch {
 		return undefined;
 	}
 }
 
-/** 进程启动时刻（/proc stat 字段 22）；进程不存在或为僵尸时 undefined。 */
-export function processStart(pid, readFile = (p) => readFileSync(p, "utf8")) {
+/** Process creation identity, not just a PID existence check. */
+export function processStart(pid, readFile = readText, { platform = process.platform, execFile = execFileSync } = {}) {
+	if (!Number.isSafeInteger(pid) || pid <= 0) return undefined;
 	try {
+		if (platform === "darwin") {
+			const value = query("/bin/ps", ["-p", String(pid), "-o", "stat=", "-o", "lstart="], execFile);
+			const match = /^(\S+)\s+(.+)$/.exec(value);
+			return match && !match[1].includes("Z") ? match[2].replace(/\s+/g, " ") : undefined;
+		}
+		if (platform === "win32") {
+			const value = query(powershellPath(), powershellArgs(`$ErrorActionPreference = 'Stop'; (Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks.ToString()`), execFile);
+			return /^\d+$/.test(value) ? value : undefined;
+		}
+		if (platform !== "linux") return undefined;
 		const stat = readFile(`/proc/${pid}/stat`);
 		const after = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/);
 		if (after[0] === "Z") return undefined;

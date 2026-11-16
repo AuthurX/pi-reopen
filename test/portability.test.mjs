@@ -91,6 +91,7 @@ test('restore uses the supplied environment for records and forwards resolved Pi
 test('WezTerm discovery checks PATH and converts every where.exe result with wslpath', () => {
   const calls = [];
   const deps = {
+    platform: 'wsl',
     readdir: () => [],
     isFile: p => p === '/custom/wezterm.exe',
     execFile: (program, args) => {
@@ -127,5 +128,5 @@ test('relocated package loads without PI_WORKSPACE_SRC or a personal fallback', 
   const mod = await import(pathToFileURL(entry).href);
   const commands = [];
   await mod.default({ on() {}, registerShortcut() {}, registerCommand: name => commands.push(name) });
-  assert.deepEqual(commands, ['all']);
+  assert.deepEqual(commands, ['reopen', 'all']);
 });

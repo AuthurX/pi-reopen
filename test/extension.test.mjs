@@ -59,7 +59,7 @@ async function loadExtension(t) {
 
 test('extension registers command/shortcut; only tui mode records members', async (t) => {
   const f = await loadExtension(t);
-  assert.ok(f.commands.all, '/all must be registered');
+  assert.ok(f.commands.reopen, '/reopen must be registered');
   f.events.session_start({}, { ...f.context, mode: 'print' });
   assert.equal(fs.existsSync(f.membersDir), false, 'print mode must not register members');
   f.events.session_start({}, f.context);
@@ -128,7 +128,7 @@ test('reload cleans up signal listeners without accumulating duplicates', async 
   assert.equal(process.listenerCount('SIGHUP'), before + 1);
 });
 
-test('/all delegates to shared core: spawns only non-live members, reports via notify', wslOnly, async (t) => {
+test('/reopen delegates to shared core: spawns only non-live members, reports via notify', wslOnly, async (t) => {
   const f = await loadExtension(t);
   f.events.session_start({}, f.context);
   const sessions = join(f.agentDir, 'sessions', 'proj');
@@ -138,7 +138,7 @@ test('/all delegates to shared core: spawns only non-live members, reports via n
   fs.writeFileSync(join(f.membersDir, 'dead.json'), JSON.stringify({
     sessionId: 'dead', cwd: f.home, sessionFile, name: 'dead', ts: Date.now() - 1000,
   }));
-  await f.commands.all.handler('', f.context);
+  await f.commands.reopen.handler('', f.context);
   assert.equal(f.hooks.calls.length, 1, 'only the passive-dead member is spawned');
   const { program, args } = f.hooks.calls[0];
   assert.equal(program, join(f.home, 'wez.exe'));
@@ -150,11 +150,11 @@ test('/all delegates to shared core: spawns only non-live members, reports via n
   assert.equal(fs.readdirSync(f.membersDir).length, 2, 'own live member untouched, no duplicates');
 });
 
-test('/all clear empties member records', async (t) => {
+test('/reopen clear empties member records', async (t) => {
   const f = await loadExtension(t);
   f.events.session_start({}, f.context);
   assert.equal(fs.readdirSync(f.membersDir).length, 1);
-  await f.commands.all.handler('clear', f.context);
+  await f.commands.reopen.handler('clear', f.context);
   assert.equal(f.memberCount(), 0);
   assert.match(f.notices.join('\n'), /已清空/);
 });
@@ -163,7 +163,17 @@ test('extension refuses unknown argument without spawning', async (t) => {
   const f = await loadExtension(t);
   f.events.session_start({}, f.context);
   f.hooks.calls.length = 0; // 共享记录数组，先清空
+  await f.commands.reopen.handler('bogus', f.context);
+  assert.match(f.notices.join('\n'), /用法/);
+  assert.equal(f.hooks.calls.length, 0);
+});
+
+test('/all alias still works and points to /reopen', async (t) => {
+  const f = await loadExtension(t);
+  f.events.session_start({}, f.context);
+  f.hooks.calls.length = 0;
   await f.commands.all.handler('bogus', f.context);
+  assert.match(f.notices.join('\n'), /已改名为 \/reopen/);
   assert.match(f.notices.join('\n'), /用法/);
   assert.equal(f.hooks.calls.length, 0);
 });

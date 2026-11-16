@@ -1,8 +1,8 @@
 {
   "name": "@ellieyujin/pi-reopen",
   "license": "MIT",
-  "version": "0.2.0",
-  "description": "Restore recorded Pi sessions in Windows WezTerm tabs from WSL; includes a Pi extension and standalone CLI.",
+  "version": "0.3.0",
+  "description": "Restore recorded Pi sessions in WezTerm tabs on Linux, macOS, Windows and WSL; includes a Pi extension and standalone CLI.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AuthurX/pi-workspace.git"
@@ -49,6 +49,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "test:platform": "node --test test/platforms.test.mjs test/extension.test.mjs test/recent.test.mjs",
     "prepublishOnly": "npm test"
   }
 }

@@ -41,6 +41,7 @@ const MAX_CONSECUTIVE_FAILURES = 3;
  */
 export async function runRestore({
 	env = process.env,
+	platform,
 	paths = workspacePaths(env),
 	dryRun = false,
 	noWait = false,
@@ -50,7 +51,7 @@ export async function runRestore({
 	prober,
 	piProber,
 } = {}) {
-	const pre = preflight({ env, prober, piProber });
+	const pre = preflight({ env, platform, prober, piProber });
 	if (!pre.ok) {
 		return { ok: false, stage: "preflight", checks: pre.checks };
 	}
@@ -80,6 +81,9 @@ export async function runRestore({
 			}
 			const spawnResult = await openTab({
 				wezterm: pre.wezterm,
+				platform: pre.platform,
+				piCommand: pre.piCommand,
+				powershell: pre.powershell,
 				distro: pre.distro,
 				piBin: pre.piBin,
 				env,

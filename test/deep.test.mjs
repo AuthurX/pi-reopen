@@ -155,17 +155,18 @@ test('preflight fails with actionable hint when pi is missing', (t) => {
   assert.match(pi.hint, /安装 pi/);
 });
 
-test('openTab omits -d when distro is unknown and passes session file as last arg', async () => {
+test('WSL openTab omits -d when distro is unknown and passes session file as last arg', async () => {
   let args;
   const result = await openTab({
     wezterm: '/x/wezterm.exe',
+    platform: 'wsl',
     distro: undefined,
     cwd: '/tmp/proj',
     sessionFile: '/s/s.jsonl',
     spawner: async (program, a) => { args = a; return { ok: true }; },
   });
   assert.equal(result.ok, true);
-  assert.deepEqual(args.slice(0, 4), ['cli', 'spawn', '--', 'wsl.exe']);
+  assert.deepEqual(args.slice(0, 6), ['cli', 'spawn', '--domain-name', 'local', '--', 'wsl.exe']);
   assert.equal(args.includes('-d'), false);
   assert.match(args.at(-1), /exec pi --session '\/s\/s\.jsonl'/);
 });

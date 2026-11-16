@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
+import { envValue, runtimePlatform } from "./platform.js";
 
 /** WezTerm 发现：显式路径 → PATH → 常见安装位置 → where.exe + wslpath。 */
 export function discoverWezterm(env = process.env, deps = {}) {
@@ -9,6 +10,28 @@ export function discoverWezterm(env = process.env, deps = {}) {
 	const execFile = deps.execFile ?? execFileSync;
 	if (env.PI_WORKSPACE_WEZTERM) {
 		return fileExists(env.PI_WORKSPACE_WEZTERM) ? env.PI_WORKSPACE_WEZTERM : undefined;
+	}
+	const platform = deps.platform ?? runtimePlatform(env);
+	if (platform !== "wsl") {
+		const windows = platform === "win32";
+		const path = windows ? win32 : posix;
+		const name = windows ? "wezterm.exe" : "wezterm";
+		const candidates = (envValue(env, "PATH") ?? "").split(windows ? ";" : ":")
+			.map((dir) => dir.replace(/^"|"$/g, ""))
+			.filter((dir) => path.isAbsolute(dir)).map((dir) => path.join(dir, name));
+		if (windows) {
+			for (const root of [envValue(env, "ProgramFiles"), envValue(env, "ProgramFiles(x86)")].filter(Boolean)) {
+				candidates.push(path.join(root, "WezTerm", name));
+			}
+			const local = envValue(env, "LOCALAPPDATA");
+			if (local) candidates.push(path.join(local, "Programs", "WezTerm", name));
+			const home = envValue(env, "USERPROFILE");
+			if (home) candidates.push(path.join(home, "scoop", "shims", name));
+		} else {
+			candidates.push("/usr/local/bin/wezterm", "/usr/bin/wezterm");
+			if (platform === "darwin") candidates.push("/opt/homebrew/bin/wezterm", "/Applications/WezTerm.app/Contents/MacOS/wezterm");
+		}
+		return candidates.find(fileExists);
 	}
 	const candidates = (env.PATH ?? "").split(":").filter((p) => p.startsWith("/"))
 		.map((dir) => join(dir, "wezterm.exe"));

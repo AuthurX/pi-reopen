@@ -6,6 +6,7 @@ import { currentBootId, isLive } from "./liveness.js";
 import { clearWorkspace } from "./members.js";
 import { inspect, label, runRestore, summarize } from "./restore.js";
 import { preflight } from "./preflight.js";
+import { runtimePlatform } from "./platform.js";
 
 const USAGE = `pi-reopen — 恢复上次的 Pi 终端组合
 
@@ -13,7 +14,7 @@ const USAGE = `pi-reopen — 恢复上次的 Pi 终端组合
   pi-reopen                       # 补开上次关闭时仍打开的 Pi（已运行的跳过）
   pi-reopen restore --dry-run     # 只看计划，不开标签页
   pi-reopen list [--wide]         # 查看登记成员与状态（长内容默认按终端宽度截断，--wide 不截断）
-  pi-reopen doctor                # 环境检查（WezTerm / WSL 互操作 / pi）
+  pi-reopen doctor                # 环境检查（平台 / WezTerm / pi / 进程身份）
   pi-reopen clear                 # 清空登记（不删除对话文件）
 
 每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
@@ -126,7 +127,7 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 				write(`${check.ok ? "✔" : "✖"} ${check.name}：${check.detail}`);
 				if (check.hint) write(`  → ${check.hint}`);
 			}
-			const binfmt = binfmtStatus();
+			const binfmt = runtimePlatform(env) === "wsl" ? binfmtStatus() : {};
 			if (binfmt.registered && !binfmt.persistent) {
 				write("⚠ WSLInterop 已注册但未持久化：");
 				for (const line of PERSIST_HINT.split("\n")) write(`  ${line}`);

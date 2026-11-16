@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 
 import { launchSetup, shellQuote } from "./launch.js";
+import { powershellArgs, powershellPath, runtimePlatform } from "./platform.js";
+import { buildWindowsScript } from "./windows.js";
 export { shellQuote } from "./launch.js";
 
 /** wezterm cli spawn 无响应时的上限；WezTerm 卡死时避免永久阻塞。 */
@@ -14,11 +16,11 @@ export function buildTabScript({ cwd, sessionFile, piBin, env = process.env }) {
 	].join("; ");
 }
 
-function defaultSpawner(program, args, timeoutMs = SPAWN_TIMEOUT_MS) {
+function defaultSpawner(program, args, timeoutMs = SPAWN_TIMEOUT_MS, env = process.env) {
 	return new Promise((resolve) => {
 		let child;
 		try {
-			child = spawn(program, args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+			child = spawn(program, args, { env, detached: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
 		} catch (error) {
 			resolve({ ok: false, error: String(error) });
 			return;
@@ -51,19 +53,20 @@ function defaultSpawner(program, args, timeoutMs = SPAWN_TIMEOUT_MS) {
  * 不代表 pi 已成功启动——后者由 verify 阶段确认。
  * spawnTimeoutMs 限制 wezterm cli 的响应时间，防止 WezTerm 卡死时永久阻塞。
  */
-export async function openTab({ wezterm, distro, cwd, sessionFile, piBin, env = process.env, spawner, spawnTimeoutMs } = {}) {
-	const script = buildTabScript({ cwd, sessionFile, piBin, env });
-	const args = [
-		"cli",
-		"spawn",
-		"--",
-		"wsl.exe",
-		...(distro ? ["-d", distro] : []),
-		"-e",
-		"bash",
-		"-lc",
-		script,
-	];
-	const run = spawner ?? ((program, a) => defaultSpawner(program, a, spawnTimeoutMs));
+export async function openTab({ wezterm, distro, cwd, sessionFile, piBin, piCommand, powershell,
+	env = process.env, platform = runtimePlatform(env), spawner, spawnTimeoutMs } = {}) {
+	let command;
+	if (platform === "win32") {
+		const script = buildWindowsScript({ cwd, sessionFile, piCommand, env });
+		command = [powershell ?? powershellPath(env), ...powershellArgs(script)];
+	} else if (["wsl", "linux", "darwin"].includes(platform)) {
+		const script = buildTabScript({ cwd, sessionFile, piBin, env });
+		command = [...(platform === "wsl" ? ["wsl.exe", ...(distro ? ["-d", distro] : []), "-e"] : []), "bash", "-lc", script];
+	} else {
+		return { ok: false, error: `不支持的平台：${platform}` };
+	}
+	// Native paths must never be sent to an SSH/WSL domain selected by the current pane.
+	const args = ["cli", "spawn", "--domain-name", "local", "--", ...command];
+	const run = spawner ?? ((program, a) => defaultSpawner(program, a, spawnTimeoutMs, env));
 	return run(wezterm, args);
 }

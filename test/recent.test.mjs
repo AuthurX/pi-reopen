@@ -9,7 +9,7 @@ import test from 'node:test';
 const project = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /**
- * /all recent 补选路径：用 src 副本替换 preflight/spawn 为可观察 stub，
+ * /reopen recent 补选路径：用 src 副本替换 preflight/spawn 为可观察 stub，
  * 验证候选发现、输入校验、确认流程、成功登记与失败回收。
  */
 async function loadRecent(t) {
@@ -82,12 +82,12 @@ async function loadRecent(t) {
   return { home, agentDir, membersDir, events, commands, notices, context, addCandidate, readCalls };
 }
 
-test('/all recent: candidate discovery, confirm, spawn, and member registration', async (t) => {
+test('/reopen recent: candidate discovery, confirm, spawn, and member registration', async (t) => {
   const f = await loadRecent(t);
   await f.events.session_start({}, f.context);
   const file = f.addCandidate('cand', join(f.home, 'cand-cwd'));
   f.context.ui.input = async () => '1';
-  await f.commands.all.handler('recent', f.context);
+  await f.commands.reopen.handler('recent', f.context);
   const calls = f.readCalls();
   assert.equal(calls.length, 1);
   assert.equal(calls[0].wezterm, join(f.home, 'wez.exe'));
@@ -102,41 +102,41 @@ test('/all recent: candidate discovery, confirm, spawn, and member registration'
   assert.match(f.notices.join('\n'), /已请求打开 1 个 pi 终端/);
 });
 
-test('/all recent: out-of-range and non-numeric input opens nothing', async (t) => {
+test('/reopen recent: out-of-range and non-numeric input opens nothing', async (t) => {
   const f = await loadRecent(t);
   await f.events.session_start({}, f.context);
   f.addCandidate('cand', join(f.home, 'cand-cwd'));
   f.context.ui.input = async () => '99,0,abc';
-  await f.commands.all.handler('recent', f.context);
+  await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 0);
   assert.match(f.notices.join('\n'), /序号无效/);
 });
 
-test('/all recent: declining confirmation opens nothing', async (t) => {
+test('/reopen recent: declining confirmation opens nothing', async (t) => {
   const f = await loadRecent(t);
   await f.events.session_start({}, f.context);
   f.addCandidate('cand', join(f.home, 'cand-cwd'));
   f.context.ui.input = async () => '1';
   f.context.ui.confirm = async () => false;
-  await f.commands.all.handler('recent', f.context);
+  await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 0);
   assert.equal(fs.existsSync(join(f.membersDir, 'cand.json')), false, '未打开不登记成员');
 });
 
-test('/all recent: no candidates in 24h window reports and stops', async (t) => {
+test('/reopen recent: no candidates in 24h window reports and stops', async (t) => {
   const f = await loadRecent(t);
   await f.events.session_start({}, f.context);
-  await f.commands.all.handler('recent', f.context);
+  await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 0);
   assert.match(f.notices.join('\n'), /近 24 小时没有可补选的对话/);
 });
 
-test('/all recent: spawn failure releases claim, registers no member, reports error', async (t) => {
+test('/reopen recent: spawn failure releases claim, registers no member, reports error', async (t) => {
   const f = await loadRecent(t);
   await f.events.session_start({}, f.context);
   f.addCandidate('bad', join(f.home, 'FAIL-cwd'));
   f.context.ui.input = async () => '1';
-  await f.commands.all.handler('recent', f.context);
+  await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 1, '请求仍发出');
   assert.equal(fs.existsSync(join(f.membersDir, 'bad.json')), false, '失败不登记成员');
   assert.equal(fs.existsSync(join(f.agentDir, 'pi-workspace', 'starting', 'bad.json')), false, '失败回收启动声明');
@@ -144,7 +144,7 @@ test('/all recent: spawn failure releases claim, registers no member, reports er
   assert.match(f.notices.join('\n'), /没有打开任何标签页/);
 });
 
-test('/all recent: live and own sessions are excluded from candidates', async (t) => {
+test('/reopen recent: live and own sessions are excluded from candidates', async (t) => {
   const f = await loadRecent(t);
   await f.events.session_start({}, f.context);
   const { processStart, currentBootId } = await import('../src/liveness.js');
@@ -157,7 +157,7 @@ test('/all recent: live and own sessions are excluded from candidates', async (t
     pid: process.pid, processStart: processStart(process.pid), bootId: currentBootId(),
   }));
   f.context.ui.input = async () => '1';
-  await f.commands.all.handler('recent', f.context);
+  await f.commands.reopen.handler('recent', f.context);
   assert.equal(f.readCalls().length, 0, 'own 与 live 会话均被排除');
   assert.match(f.notices.join('\n'), /近 24 小时没有可补选的对话/);
 });
