@@ -19,13 +19,29 @@
 
 它负责**重新启动进程并加载原对话**，不是历史会话选择器，也不会恢复运行中的工具、未保存状态、分屏几何布局或其他 Shell 程序。主动退出 Pi 会移除登记。它不会在启动 WezTerm 时自动执行；重开终端后运行 `pi-reopen` 即可。
 
+## 适用场景与平台支持
+
+**适合这样的工作方式：你在 WezTerm 中为多个项目打开了 Pi 会话，关闭终端后，希望一次找回这些已登记会话的工作目录和对话。** 重新打开 WezTerm，再运行 `pi-reopen`，即可将待恢复会话重新开成标签页。
+
+| 运行环境 | 支持状态 | 会话恢复位置 |
+| --- | --- | --- |
+| Linux 原生 | 已实现 | Linux 本机 WezTerm 的新标签页 |
+| macOS 原生 | 已实现 | Mac 本机 WezTerm 的新标签页 |
+| Windows 原生 | 已实现 | Windows 本机 WezTerm 的新标签页，运行 Windows 原生 Pi |
+| WSL | 已实现 | Windows WezTerm 的新标签页，通过对应 WSL 发行版启动 Pi |
+| FreeBSD 等其他系统 | 暂不支持 | 恢复预检会拒绝未支持的平台 |
+
+**目前只支持恢复到本机 WezTerm**，不支持恢复到 Windows Terminal、iTerm2、VS Code 集成终端或 tmux。PowerShell、Bash、zsh 等是 Shell，不是恢复目标终端；使用 PowerShell 运行命令仍需先打开 WezTerm。Windows 原生与 WSL 是两套独立环境，不能用一侧的安装恢复另一侧的会话，也不支持跨机器迁移。
+
+“已实现”表示已有对应平台的恢复代码，不代表所有实机场景均已验收；验证范围与限制见[平台说明](docs/PLATFORMS.md)。
+
 ## 快速开始
 
-**1.0.2 发布版**的主包为 `pi-reopen`，`@ellieyujin/pi-reopen` 保留为兼容发行包。1.0.2 发布之前，请将以下两条安装命令中的包名替换为 scoped 名称；不要同时安装两个发行包。
+唯一维护的 npm 包为 `@ellieyujin/pi-reopen`，CLI 命令仍为 `pi-reopen`。
 
 ```bash
-pi install npm:pi-reopen@latest
-npm install -g pi-reopen@latest --omit=peer
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
@@ -46,7 +62,7 @@ pi-reopen
 - Linux/macOS/WSL 需要 Bash；Windows 原生需要 Windows PowerShell 5.1（含 CIM），并为 Pi 的 Bash 工具安装 Git for Windows；建议使用近期 WezTerm nightly
 - WSL 恢复使用发行版默认用户，请以该用户运行；不要让 Windows 原生与 WSL 共用同一登记目录
 
-1.0.0 为第一个稳定版。CI 在 Linux/macOS/Windows 上跑完整测试、校验打包实物，并在 Linux 上跑真实 Pi PTY 生命周期；macOS/Windows 的真实关窗与恢复仍需实机验收，详见[平台说明](docs/PLATFORMS.md)。
+1.0.0 为第一个稳定版。CI 在 Linux/macOS/Windows 上跑平台测试，并在 Linux 上跑完整回归、打包校验和真实 Pi PTY 生命周期；macOS/Windows 的真实关窗与恢复仍需实机验收，详见[平台说明](docs/PLATFORMS.md)。
 
 ## 使用
 
@@ -102,11 +118,11 @@ Pi 内等价入口：
 
 ### 从 npm 安装
 
-1.0.2 及以后使用主包 `pi-reopen` 和稳定版 `latest` dist-tag；该版本发布前请替换为 `@ellieyujin/pi-reopen`。无 scope 的 `pi-workspace` 属于其他作者的项目。
+使用 `@ellieyujin/pi-reopen` 和稳定版 `latest` dist-tag。无 scope 的 `pi-reopen` 已撤包；无 scope 的 `pi-workspace` 属于其他作者的项目。
 
 ```bash
-pi install npm:pi-reopen@latest
-npm install -g pi-reopen@latest --omit=peer
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
@@ -116,18 +132,18 @@ pi-reopen doctor
 
 **登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的 `open-all.ts` 副本/符号链接；迁移前用 `pi list` 和个人扩展目录核对，只禁用旧入口，不要删除会话或认证文件。
 
-### 切换到短包名（发布后）
+### 从已撤包的短包名迁移
 
-`pi-reopen` 与 `@ellieyujin/pi-reopen` 计划发布同一实现。**只加载一个**：Pi 将不同 npm 名称视为不同包。先用 `pi list` 查看并移除原来的精确来源；以下示例适用于通过 `@latest` 安装的用户：
+已经使用 `@ellieyujin/pi-reopen` 的用户无需更换包名。如果曾安装现已撤包的 `pi-reopen`，先移除它，再安装维护中的包，避免重复加载与 CLI 冲突。先用 `pi list` 查看并移除原来的精确来源；以下示例适用于通过 `@latest` 安装的用户：
 
 ```bash
-pi remove npm:@ellieyujin/pi-reopen@latest
-npm uninstall -g @ellieyujin/pi-reopen
-pi install npm:pi-reopen@latest
-npm install -g pi-reopen@latest --omit=peer
+pi remove npm:pi-reopen@latest
+npm uninstall -g pi-reopen
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 ```
 
-重启 Pi 后执行 `pi-reopen doctor`。对话文件与 `~/.pi/agent/pi-reopen/` 登记路径不变，不要删除它们。老用户也可以继续使用 scoped 发行包；CLI 与扩展应保持同版本。不要同时加载本地 `open-all.ts` 软链与 npm 包。
+重启 Pi 后执行 `pi-reopen doctor`。对话文件与 `~/.pi/agent/pi-reopen/` 登记路径不变，不要删除它们。CLI 与扩展应保持同版本。不要同时加载本地 `open-all.ts` 软链与 npm 包。
 
 ### 从源码安装
 

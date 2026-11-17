@@ -1,8 +1,15 @@
 # Changelog
 
-## 1.0.2 — Unreleased
+## 1.0.3 — 2026-11-17
 
-- 准备以 `pi-reopen` 为主包，保留 `@ellieyujin/pi-reopen` 同版本兼容发行；新增临时目录发布脚本，避免改写工作树。
+- 统一以 `@ellieyujin/pi-reopen` 为唯一 npm 发行包；移除双包发布脚本与 CI 步骤，同步安装、迁移和发布文档。CLI 名称与会话登记目录不变。
+- 打包校验固定 scoped 包名并保留 `pi-package` 关键词；搜索与下载统计仅跟踪该包。
+- 双语 README 新增适用场景与平台支持表，明确仅恢复到本机 WezTerm，以及 Windows 原生与 WSL 的环境边界。
+- 本次不修改恢复运行时逻辑。已知 Windows PowerShell CLIXML 进度输出问题尚未修复；macOS/Windows 真实 GUI 关窗与恢复仍待实机验收。
+
+## 1.0.2 — 2026-11-17
+
+- 曾发布 `pi-reopen` 与 `@ellieyujin/pi-reopen` 双包；无 scope 的 `pi-reopen` 随后撤包，不再作为安装入口。
 - 补充 session / resume / restore 等需求关键词及双语快速入门、原生 `pi -c` 对比和包名迁移说明。
 - 公开链接统一为 `AuthurX/pi-reopen`；补充仓库改名后的 npm Trusted Publisher 发布门禁。
 - 新增公开搜索/下载统计脚本、推广文案草稿与效果跟踪计划；未改变会话恢复运行时逻辑。

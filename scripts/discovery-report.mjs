@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-const packages = ["pi-reopen", "@ellieyujin/pi-reopen"];
+const packages = ["@ellieyujin/pi-reopen"];
 const queries = ["pi reopen", "pi wezterm", "pi resume", "pi restore session", "wezterm session recovery"];
 const errors = [];
 function get(url) {

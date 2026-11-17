@@ -49,7 +49,7 @@ pi-reopen
 - 主动退出 Pi 的会话不作为待恢复窗口保留。
 - 扩展安装前未登记的窗口无法精确还原；`/reopen recent` 可以辅助从近期历史中补选。
 - 支持 Linux/macOS/Windows 原生以及 WSL + Windows WezTerm；WSL 有实机验收，macOS/Windows 的 GUI 关窗恢复仍需更多验证。
-- 不要同时安装本地软链、旧 scoped 包和新短包名，避免重复加载。
+- npm 仅使用 `@ellieyujin/pi-reopen`，不要同时加载本地软链或其他安装来源，避免重复加载。
 
 ## 欢迎反馈
 

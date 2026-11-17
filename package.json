@@ -1,7 +1,7 @@
 {
-  "name": "pi-reopen",
+  "name": "@ellieyujin/pi-reopen",
   "license": "MIT",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Resume and restore your Pi coding agent sessions as WezTerm tabs after the terminal closes. Registers open Pi sessions and reopens them with original cwd and conversation. Linux, macOS, Windows, WSL.",
   "repository": {
     "type": "git",
@@ -71,7 +71,6 @@
     "test:platform": "node --test test/platforms.test.mjs test/extension.test.mjs test/recent.test.mjs",
     "test:integration": "PI_REOPEN_INTEGRATION=1 node --test test/integration.test.mjs",
     "verify-pack": "node scripts/verify-pack.mjs",
-    "publish-legacy": "node scripts/publish-legacy.mjs",
     "discovery-report": "node scripts/discovery-report.mjs",
     "prepublishOnly": "npm test"
   }

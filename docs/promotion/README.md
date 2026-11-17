@@ -13,10 +13,10 @@
 
 ## 发布门禁
 
-1. `npm test`、主包 tarball 验证、旧包 dry-run 通过。
-2. 核验短包名所有权和两个包的 npm Trusted Publisher；仓库改名后核验 provenance 链路。
+1. `npm test`、`npm run verify-pack` 通过。
+2. 核验 `@ellieyujin/pi-reopen` 的 npm Trusted Publisher；仓库改名后核验 provenance 链路。
 3. 审查 diff 后由维护者提交、推送、发布，不能宣称未发布的包已可安装。
-4. 验证 `pi-reopen` 和 `@ellieyujin/pi-reopen` 同版本可安装；说明二选一，避免双加载。
+4. 验证 `@ellieyujin/pi-reopen` 的扩展和 CLI 均可安装，避免与本地软链重复加载。
 5. 更新双语 README 的快速安装、目录链接和发布状态，再发推广文案。
 6. 不盲目每周发版本；只有真实修复、功能或文档变更才发布。
 
@@ -43,7 +43,7 @@ node scripts/discovery-report.mjs > /tmp/pi-reopen-discovery.json
 
 改动前留一份基线；发布后第 7、14、28 天再采样。报告只查询公开 npm API，不上传本地会话。`curl` 读取代理环境变量；单项失败以 errors 标注并返回非零，缺失不当作零。
 
-记录：日期、查询词、前 50 结果排名、周/月下载窗口、文章链接、用户实际反馈、复现成功的安装问题。两个包分别统计，不相加当作独立用户；CI、重复下载、发布测试和迁移都能增加下载次数。GitHub traffic 仅维护者可查看，不能用 stars 代替安装数。
+记录：日期、查询词、前 50 结果排名、周/月下载窗口、文章链接、用户实际反馈、复现成功的安装问题。仅跟踪 `@ellieyujin/pi-reopen`，下载量不当作独立用户数；CI、重复下载、发布测试和迁移都能增加下载次数。GitHub traffic 仅维护者可查看，不能用 stars 代替安装数。
 
 ## 依据与边界
 

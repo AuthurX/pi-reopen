@@ -55,7 +55,9 @@ try {
 	const pkgDir = join(work, "package");
 	const sourceManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 	const manifest = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
-	assert.equal(manifest.name, "pi-reopen");
+	assert.equal(manifest.name, "@ellieyujin/pi-reopen");
+	assert.deepEqual(manifest.bin, { "pi-reopen": "bin/pi-reopen.js" });
+	assert.equal(manifest.scripts["publish-legacy"], undefined);
 	assert.equal(manifest.version, sourceManifest.version);
 	assert.equal(manifest.repository.url, "git+https://github.com/AuthurX/pi-reopen.git");
 	assert.ok(manifest.keywords.includes("pi-package"));

@@ -11,10 +11,10 @@ Pi 没有要求把源码上传到单独的 Pi 注册中心。分发有两条路�
 
 ## 发布前必须确认
 
-- **包名**：准备以 `pi-reopen` 为主包，同时发布 `@ellieyujin/pi-reopen` 兼容发行包；两者是同一实现，用户只能加载其中一个。使用 npm 账户 `ellieyujin`；404 不代表已占有短包名，首次正式发布才确认可用。CLI 仍为 `pi-reopen`，不更改用户登记目录。
-- **旧包兼容**：`npm run publish-legacy` 在临时目录解包主包、改名再发布，不修改工作树；去掉旧包的 `pi-package` 关键词以减少目录重复展示。已有版本的索引可能仍保留，不能保证目录立即合并。该脚本必须在完整测试和主包验证通过后运行，不能代替验证。
+- **包名**：仅发布 `@ellieyujin/pi-reopen`，使用 npm 账户 `ellieyujin`，保留 `pi-package` 关键词。无 scope 的 `pi-reopen` 已撤包，不再发布。CLI 仍为 `pi-reopen`，不更改用户登记目录。
+- **迁移**：已安装短包名的用户按双语 README 移除旧来源，再安装 scoped 包；原 scoped 包用户无需迁移。
 - **许可证**：已选择 [MIT](../LICENSE)，版权人为 `ellieyujin`；`package.json.license` 已声明为 `MIT`，发布包须包含完整 LICENSE。
-- **版本**：本次准备 `1.0.2`，尚未发布；`publishConfig.tag` 为 `latest`。已发布的同名同版本不能重复发布。
+- **版本**：`@ellieyujin/pi-reopen@1.0.2` 已发布；本次单包配置与文档修正使用 `1.0.3`，不能覆盖 `1.0.2`。`publishConfig.tag` 为 `latest`。
 - **功能验收**：WSL 恢复已完成实机验收；三平台 CI 通过，打包实物与真实 Pi PTY 生命周期由 CI 覆盖。macOS/Windows 真实 WezTerm 关窗与恢复仍待实机验收。恢复锁与启动声明已改为原子创建，但跨版本（旧 CLI）并发不承诺互斥。
 - **工作树**：核对所有未提交修改（含原有修改），不要把未审查内容一起提交。本文不自动提交、推送或发布。
 
@@ -34,22 +34,21 @@ PTY 测试需要已安装 Pi；它只用临时配置测试信号退出与主动�
 
 打包实物也应在临时目录解压后测试 CLI 和 Pi 扩展，且不设置 `PI_REOPEN_SRC`，避免本机源码兜底掩盖漏打包。
 
-## 仓库改名与首次双包发布门禁
+## 仓库改名与发布门禁
 
 仓库由 `AuthurX/pi-workspace` 改名为 `AuthurX/pi-reopen`。更新本地 origin 与公开链接；不要重新创建旧名仓库，以免破坏 GitHub 重定向。本地源码目录无需改名，避免破坏扩展软链。
 
-发布前在 npm 网页设置中核对**两个包各自**的 Trusted Publisher：
+发布前在 npm 网页设置中核对 `@ellieyujin/pi-reopen` 的 Trusted Publisher：
 
 - GitHub 用户：`AuthurX`
 - 仓库：`pi-reopen`
 - Workflow：`release.yaml`
-- 新包首次发布可能需要维护者通过浏览器/2FA 完成，再配置 trusted publishing。不要假定旧包授权自动覆盖新包。
 - 现有 publisher 连接的字段不可直接修改；需要时按 npm 指引删除旧连接并创建新连接。已有绑定是否随重命名生效需实测，不要仅凭 GitHub 重定向判断。首次成功发布绑定仓库身份；新建配置需按 npm 当前时限验证。
 - `repository.url` 必须与实际发布仓库一致。不要在核验完成前推送发布 tag。
 
-首次双包发布可在检查完成后由维护者执行 `npm publish --access public --tag latest`、`npm run publish-legacy`（本地不传 `--provenance`）；CI 发布传 `--provenance`。两个包的发布不是原子事务，若第二个失败，应修正授权并补发同版本旧包，不重发已成功的主包。
+检查完成且版本号更新后，维护者可执行 `npm publish --access public --tag latest`（本地不传 `--provenance`）；CI 发布传 `--provenance`。仅发布 scoped 包，不再进行改名兼容发行。
 
-双语 README 已按 1.0.2 的主包安装方式编写，并保留发版前使用 scoped 包的提示，避免 npm tarball 在首次发布后仍主推旧包。确认两个 npm 包都可安装后，再更新 Pi 目录链接与推广文案；不要提前宣布短包名已发布。
+双语 README、Pi 目录链接与推广文案统一指向 `@ellieyujin/pi-reopen`。npm 上的 1.0.2 包含双包时期的描述和文档，1.0.3 改回单包说明；本地修改需发布后才会同步到 npm。
 
 ### 当前环境恢复登录与核验授权
 
@@ -68,15 +67,15 @@ CLI 支持 `npm trust` 时，可先预览配置（不修改服务端）：
 npm trust github @ellieyujin/pi-reopen --repo AuthurX/pi-reopen --file release.yaml --allow-publish --browser=false --dry-run
 ```
 
-核对现有 trust 列表后，才决定是否创建/替换连接，不盲目撤销已生效的授权。新包首次发布成功后，也要为 `pi-reopen` 配置同一仓库与 workflow 的独立 trust。凭据、OTP 和浏览器授权链接无需发到聊天。
+核对现有 trust 列表后，才决定是否创建/替换连接，不盲目撤销已生效的授权。只需核验 `@ellieyujin/pi-reopen`，不为已撤包的短包名配置发布权限。凭据、OTP 和浏览器授权链接无需发到聊天。
 
 ## GitHub 自动发布
 
-更新版本并提交后，推送 main 和对应的 `v<版本号>` tag。`.github/workflows/release.yaml` 调用同一提交的三平台测试工作流；所有检查通过后，核对 tag 与 package 版本、检查打包清单，再通过核验后的 npm trusted publishing 依次发布主包、scoped 兼容包并创建 GitHub Release。任一平台失败均阻止发布，无需复制 npm token。
+更新版本并提交后，推送 main 和对应的 `v<版本号>` tag。`.github/workflows/release.yaml` 调用同一提交的三平台测试工作流；所有检查通过后，核对 tag 与 package 版本、检查打包清单，再通过核验后的 npm trusted publishing 发布 `@ellieyujin/pi-reopen` 并创建 GitHub Release。任一平台失败均阻止发布，无需复制 npm token。
 
 正式 tag（例如 `v0.3.0`）发布到 `latest`；带预发布后缀的 tag 才发布到 `next`。不要重写或移动已经发布的 tag。
 
-## 首次 npm 发布（手动备用）
+## npm 发布（手动备用）
 
 以下命令在仓库根目录由维护者确认后手动运行。已登录时无需重复登录；`whoami` 应输出 `ellieyujin`：
 
@@ -109,8 +108,8 @@ npm publish --access public --tag latest
 1. `npm test`、`npm run verify-pack`、`python3 test/pty-shutdown.py` 全绿。
 2. 有运行中的 WezTerm 时执行 `npm run test:integration`（真实开标签页 + 标题）。
 3. 按 [PLATFORMS.md](PLATFORMS.md) 的验收清单在 macOS/Windows 实机验证关窗与恢复；未验证的平台差异写进 Release notes。
-4. 确认 `package.json` 版本与 tag 一致（本次计划 `v1.0.2`），两个包的发布授权已验证，`publishConfig.tag` 为 `latest`。
-5. 审核提交后推送 `main` 与对应 tag；CI 在 Linux/macOS/Windows、打包实物、真实 Pi PTY 全部通过后才发布两个包。
+4. 确认 `package.json` 的包名为 `@ellieyujin/pi-reopen`、版本号尚未发布且与 tag 一致，发布授权已验证，`publishConfig.tag` 为 `latest`。
+5. 审核提交后推送 `main` 与对应 tag；CI 在 Linux/macOS/Windows、打包实物、真实 Pi PTY 全部通过后才发布该包。
 6. 发布后按下方“发布后的安装验证”跑一遍；`pi-reopen doctor` 应同时显示扩展已加载且版本一致。
 
 不要重写或移动已发布的 tag；发现问题时发新版本。
@@ -118,13 +117,12 @@ npm publish --access public --tag latest
 ## 发布后的安装验证
 
 ```bash
-npm view pi-reopen@latest name version repository dist-tags --registry=https://registry.npmjs.org/
 npm view @ellieyujin/pi-reopen@latest name version repository dist-tags --registry=https://registry.npmjs.org/
 # Linux/macOS/WSL：临时配置与 CLI 前缀，不修改个人安装。
 CHECK_DIR="$(mktemp -d)"
-PI_CODING_AGENT_DIR="$CHECK_DIR/agent" pi install npm:pi-reopen@latest
-npm install --prefix "$CHECK_DIR/cli" --omit=peer pi-reopen@latest
-node "$CHECK_DIR/cli/node_modules/pi-reopen/bin/pi-reopen.js" --version
+PI_CODING_AGENT_DIR="$CHECK_DIR/agent" pi install npm:@ellieyujin/pi-reopen@latest
+npm install --prefix "$CHECK_DIR/cli" --omit=peer @ellieyujin/pi-reopen@latest
+node "$CHECK_DIR/cli/node_modules/@ellieyujin/pi-reopen/bin/pi-reopen.js" --version
 # 启动隔离的 Pi 并加载扩展后，在其中运行 /reopen；无需调用模型。
 PI_CODING_AGENT_DIR="$CHECK_DIR/agent" pi
 # doctor 应在同一隔离配置下执行；未启动扩展前报告“未加载”属于预期。

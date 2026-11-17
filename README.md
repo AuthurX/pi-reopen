@@ -19,13 +19,29 @@ A [Pi](https://github.com/earendil-works/pi) extension and CLI for **session rec
 
 This is workspace **session restoration**, not a replacement for Pi's session picker. It starts new Pi processes with the original session files; it does not restore running tools, unsaved state, split-pane geometry, or arbitrary shell programs. Deliberately quitting Pi removes its registration. WezTerm startup does not automatically trigger recovery; run `pi-reopen` after reopening it.
 
+## Use case and platform support
+
+**Built for working across projects in WezTerm: you have several Pi sessions open, close the terminal, and want the recorded sessions back with their working directories and conversations.** Reopen WezTerm, then run `pi-reopen` to restore pending sessions in new tabs.
+
+| Runtime environment | Support status | Where sessions reopen |
+| --- | --- | --- |
+| Native Linux | Implemented | New tabs in the local Linux WezTerm instance |
+| Native macOS | Implemented | New tabs in the local Mac WezTerm instance |
+| Native Windows | Implemented | New tabs in the local Windows WezTerm instance, running native Windows Pi |
+| WSL | Implemented | New tabs in Windows WezTerm, launching Pi in the corresponding WSL distribution |
+| FreeBSD and other operating systems | Not supported | Restore preflight rejects unsupported platforms |
+
+**The only restoration target is local WezTerm.** Restoring into Windows Terminal, iTerm2, the VS Code integrated terminal, or tmux is not supported. PowerShell, Bash, and zsh are shells, not target terminal applications; running the command from PowerShell still requires WezTerm to be open. Native Windows and WSL are separate environments: an installation on one side cannot restore sessions from the other. Cross-machine migration is not supported.
+
+“Implemented” means a platform-specific restore path exists, not that every real-machine scenario has been verified. See [platform notes](docs/PLATFORMS.md) for validation coverage and limitations.
+
 ## Quick start
 
-For the **1.0.2 release**, the primary package is `pi-reopen`; `@ellieyujin/pi-reopen` remains the compatibility distribution. Until 1.0.2 is published, use the scoped name in both installation commands below. Never install both distributions together.
+`@ellieyujin/pi-reopen` is the only maintained npm package. The CLI command remains `pi-reopen`.
 
 ```bash
-pi install npm:pi-reopen@latest
-npm install -g pi-reopen@latest --omit=peer
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
@@ -46,7 +62,7 @@ See [installation and migration](#installation) before switching package names.
 - Linux/macOS/WSL require Bash. Native Windows requires Windows PowerShell 5.1 (including CIM); install Git for Windows for Pi's Bash tool, and prefer a recent WezTerm nightly
 - WSL restore uses the distro's default user; run this tool as that user. Do not share one registry between native Windows and WSL
 
-Version 1.0.0 is the first stable release. CI runs the full suite on Linux, macOS and Windows, verifies the packaged tarball and runs the real Pi PTY lifecycle on Linux; macOS/Windows GUI close/reopen acceptance still needs real-machine verification. See [platform notes](docs/PLATFORMS.md).
+Version 1.0.0 is the first stable release. CI runs platform tests on Linux, macOS and Windows, with the full regression suite, packaged-tarball checks and real Pi PTY lifecycle on Linux; macOS/Windows GUI close/reopen acceptance still needs real-machine verification. See [platform notes](docs/PLATFORMS.md).
 
 ## Usage
 
@@ -102,11 +118,11 @@ Exit codes: 0 success; 1 restore request failed or unknown command; 2 environmen
 
 ### From npm
 
-For 1.0.2 and later, use `pi-reopen` with the stable `latest` dist-tag. Before that release, substitute `@ellieyujin/pi-reopen`. The unscoped `pi-workspace` on npm is a different author's project.
+Use `@ellieyujin/pi-reopen` with the stable `latest` dist-tag. The unscoped `pi-reopen` package has been unpublished. The unscoped `pi-workspace` on npm is a different author's project.
 
 ```bash
-pi install npm:pi-reopen@latest
-npm install -g pi-reopen@latest --omit=peer
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
@@ -116,18 +132,18 @@ pi-reopen doctor
 
 **Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load an old `open-all.ts` copy/symlink at the same time as the package; before migrating, check `pi list` and the personal extension directory, disable the old entry only, and do not delete session or auth files.
 
-### Moving to the shorter package name (after release)
+### Migrating from the unpublished package
 
-`pi-reopen` and `@ellieyujin/pi-reopen` are intended to distribute the same implementation. **Load only one**: Pi treats different npm names as different packages. Check `pi list` and remove the exact old source shown there before installing the new one. For an installation using `@latest`:
+`@ellieyujin/pi-reopen` users do not need to change package names. If you installed the now-unpublished `pi-reopen`, remove it before installing the maintained package to avoid duplicate loading and CLI conflicts. Check `pi list` and remove the exact old source shown there. For an installation using `@latest`:
 
 ```bash
-pi remove npm:@ellieyujin/pi-reopen@latest
-npm uninstall -g @ellieyujin/pi-reopen
-pi install npm:pi-reopen@latest
-npm install -g pi-reopen@latest --omit=peer
+pi remove npm:pi-reopen@latest
+npm uninstall -g pi-reopen
+pi install npm:@ellieyujin/pi-reopen@latest
+npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 ```
 
-Restart Pi, then run `pi-reopen doctor`. Session files and `~/.pi/agent/pi-reopen/` registrations are unchanged; do not delete them. Existing users may stay on the scoped distribution. CLI and extension versions should match. Do not combine a local `open-all.ts` link with either package.
+Restart Pi, then run `pi-reopen doctor`. Session files and `~/.pi/agent/pi-reopen/` registrations are unchanged; do not delete them. CLI and extension versions should match. Do not combine a local `open-all.ts` link with the npm package.
 
 ### From source
 
