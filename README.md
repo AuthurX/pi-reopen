@@ -1,14 +1,42 @@
-# pi-reopen
+# pi-reopen — restore Pi sessions in WezTerm
 
-<p align="center">
-  <a href="https://github.com/AuthurX/pi-workspace/blob/main/README.md">English</a> | <a href="https://github.com/AuthurX/pi-workspace/blob/main/README.zh-CN.md">简体中文</a>
-</p>
+[English](README.md) | [简体中文](README.zh-CN.md) · [Pi package](https://pi.dev/packages/@ellieyujin/pi-reopen) · [Releases](https://github.com/AuthurX/pi-reopen/releases)
 
-**Reopen your Pi terminals after WezTerm closes.**
+**Reopen WezTerm. Restore your Pi coding agent sessions, working directories, and conversations with one command.**
 
-![preview](https://raw.githubusercontent.com/AuthurX/pi-workspace/main/assets/preview.png)
+![Pi session recovery preview](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/preview.png)
 
-A [Pi](https://github.com/earendil-works/pi) package: the extension registers open Pis in real time, and the `pi-reopen` CLI reopens them as [WezTerm](https://wezm.dev/) tabs.
+A [Pi](https://github.com/earendil-works/pi) extension and CLI for **session recovery after closing the terminal**. It records open Pi sessions and reopens them as [WezTerm](https://wezterm.org/) tabs, skipping sessions that are already running.
+
+## Resume one session or restore a workspace?
+
+| Goal | Use |
+| --- | --- |
+| Continue the latest session in your current directory | Built-in `pi -c` |
+| Pick a historical conversation | Built-in `pi -r` or `/resume` |
+| Reopen the recorded Pi sessions across projects after WezTerm closes | `pi-reopen` |
+| Preview the recovery plan without opening tabs | `pi-reopen restore --dry-run` |
+
+This is workspace **session restoration**, not a replacement for Pi's session picker. It starts new Pi processes with the original session files; it does not restore running tools, unsaved state, split-pane geometry, or arbitrary shell programs. Deliberately quitting Pi removes its registration. WezTerm startup does not automatically trigger recovery; run `pi-reopen` after reopening it.
+
+## Quick start
+
+For the **1.0.2 release**, the primary package is `pi-reopen`; `@ellieyujin/pi-reopen` remains the compatibility distribution. Until 1.0.2 is published, use the scoped name in both installation commands below. Never install both distributions together.
+
+```bash
+pi install npm:pi-reopen@latest
+npm install -g pi-reopen@latest --omit=peer
+pi-reopen doctor
+```
+
+Run `/reload` in each existing Pi so it starts recording. After closing and reopening WezTerm:
+
+```bash
+pi-reopen restore --dry-run
+pi-reopen
+```
+
+See [installation and migration](#installation) before switching package names.
 
 ## Requirements
 
@@ -74,11 +102,11 @@ Exit codes: 0 success; 1 restore request failed or unknown command; 2 environmen
 
 ### From npm
 
-Use the full package name `@ellieyujin/pi-reopen` with the stable `latest` dist-tag. The unscoped `pi-workspace` on npm is a different author's project.
+For 1.0.2 and later, use `pi-reopen` with the stable `latest` dist-tag. Before that release, substitute `@ellieyujin/pi-reopen`. The unscoped `pi-workspace` on npm is a different author's project.
 
 ```bash
-pi install npm:@ellieyujin/pi-reopen@latest
-npm install -g @ellieyujin/pi-reopen@latest --omit=peer
+pi install npm:pi-reopen@latest
+npm install -g pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
@@ -88,13 +116,26 @@ pi-reopen doctor
 
 **Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load an old `open-all.ts` copy/symlink at the same time as the package; before migrating, check `pi list` and the personal extension directory, disable the old entry only, and do not delete session or auth files.
 
+### Moving to the shorter package name (after release)
+
+`pi-reopen` and `@ellieyujin/pi-reopen` are intended to distribute the same implementation. **Load only one**: Pi treats different npm names as different packages. Check `pi list` and remove the exact old source shown there before installing the new one. For an installation using `@latest`:
+
+```bash
+pi remove npm:@ellieyujin/pi-reopen@latest
+npm uninstall -g @ellieyujin/pi-reopen
+pi install npm:pi-reopen@latest
+npm install -g pi-reopen@latest --omit=peer
+```
+
+Restart Pi, then run `pi-reopen doctor`. Session files and `~/.pi/agent/pi-reopen/` registrations are unchanged; do not delete them. Existing users may stay on the scoped distribution. CLI and extension versions should match. Do not combine a local `open-all.ts` link with either package.
+
 ### From source
 
 The following commands run on Linux/macOS/WSL and install the currently checked-out source:
 
 ```bash
-git clone https://github.com/AuthurX/pi-workspace.git
-cd pi-workspace
+git clone https://github.com/AuthurX/pi-reopen.git
+cd pi-reopen
 pi install .
 mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/bin/pi-reopen.js" "$HOME/.local/bin/pi-reopen"
@@ -117,7 +158,7 @@ Use `pi.cmd` instead of `pi` if PowerShell execution policy blocks npm's `.ps1` 
 If you only need the extension, you can also install the pushed Git version directly:
 
 ```bash
-pi install git:github.com/AuthurX/pi-workspace
+pi install git:github.com/AuthurX/pi-reopen
 ```
 
 ## Optional Configuration
@@ -146,7 +187,7 @@ On Linux/macOS/WSL, Pi is located from PATH and the Bash login environment. Nati
 
 ## How It Works
 
-![How it works](https://raw.githubusercontent.com/AuthurX/pi-workspace/main/assets/how-it-works.png)
+![How it works](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/how-it-works.png)
 
 - **Registration**: on every Pi startup, `{session file absolute path, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` is written in real time to `~/.pi/agent/pi-reopen/members/` (one file per session, atomic replacement). Records written by 0.3.0 and earlier under `pi-workspace/` are still read and cleaned.
 - **Close detection**: Pi's signal exits also emit a `quit` cleanup event, so the event name alone is not reliable. The extension records SIGHUP/SIGTERM within the TUI lifecycle; a signal-less deliberate `/quit` or session switch deletes the record; reload keeps the record and cleans up listeners. Without a tracked signal it also asks WezTerm whether the current pane still exists (`WEZTERM_PANE`): a vanished pane means the window was closed, so the record is kept. When a hard kill prevents cleanup, the leftover is recorded. On power loss, at most the persisted records are recovered; the latest unflushed changes are not guaranteed.
@@ -183,6 +224,10 @@ Tests cover core restore, signal handling order, reload cleanup, pane-based clos
 CI runs the platform suite on Linux/macOS/Windows, the full suite on Linux, the packaged-tarball check and the real Pi PTY lifecycle (it installs the Pi host). CI cannot open a WezTerm GUI, so the real spawn/title test stays opt-in via `PI_REOPEN_INTEGRATION=1`.
 
 Maintainer release steps: see the [publishing guide](docs/PUBLISHING.md) and [CHANGELOG](CHANGELOG.md).
+
+## Feedback and sharing
+
+If this solves your terminal restart workflow, share the [repository](https://github.com/AuthurX/pi-reopen) with other Pi / WezTerm users. [Report recovery problems](https://github.com/AuthurX/pi-reopen/issues) with your OS, Pi/WezTerm versions, and **redacted** `pi-reopen doctor` output. Never upload credentials or private conversation files. See the [outreach drafts and measurement plan](https://github.com/AuthurX/pi-reopen/blob/main/docs/promotion/README.md).
 
 ## Contributors
 

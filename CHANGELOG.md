@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.2 — Unreleased
+
+- 准备以 `pi-reopen` 为主包，保留 `@ellieyujin/pi-reopen` 同版本兼容发行；新增临时目录发布脚本，避免改写工作树。
+- 补充 session / resume / restore 等需求关键词及双语快速入门、原生 `pi -c` 对比和包名迁移说明。
+- 公开链接统一为 `AuthurX/pi-reopen`；补充仓库改名后的 npm Trusted Publisher 发布门禁。
+- 新增公开搜索/下载统计脚本、推广文案草稿与效果跟踪计划；未改变会话恢复运行时逻辑。
+
+## 1.0.1 — 2026-11-16
+
+- 精简 npm 包描述为一句："Reopen your Pi terminals after WezTerm closes."
+
 ## 1.0.0 — 2026-11-16
 
 第一个稳定版。0.4 系列的全部修复合并发布：关闭判定、并发安全、产品化外壳与发布流程。

@@ -39,6 +39,8 @@ jobs:
           package-manager-cache: false
       - name: Verify tarball contents and run the packaged CLI
         run: npm run verify-pack
+      - name: Verify scoped compatibility package without publishing
+        run: npm run publish-legacy -- --dry-run
 
   pty:
     name: Real Pi PTY lifecycle

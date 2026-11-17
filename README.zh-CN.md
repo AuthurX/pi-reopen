@@ -1,14 +1,42 @@
-# pi-reopen
+# pi-reopen — 重开 WezTerm 后恢复 Pi 会话
 
-<p align="center">
-  <a href="https://github.com/AuthurX/pi-workspace/blob/main/README.md">English</a> | <a href="https://github.com/AuthurX/pi-workspace/blob/main/README.zh-CN.md">简体中文</a>
-</p>
+[English](README.md) | [简体中文](README.zh-CN.md) · [Pi 扩展目录](https://pi.dev/packages/@ellieyujin/pi-reopen) · [版本发布](https://github.com/AuthurX/pi-reopen/releases)
 
-**一条命令，找回关闭 WezTerm 时还开着的 Pi 终端。**
+**一条命令恢复之前打开的 Pi coding agent 会话、工作目录与对话，不必逐个寻找历史记录。**
 
-![preview](https://raw.githubusercontent.com/AuthurX/pi-workspace/main/assets/preview.png)
+![Pi 会话恢复预览](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/preview.png)
 
-一个 [Pi](https://github.com/earendil-works/pi) 包：扩展实时登记打开的 Pi，`pi-reopen` CLI 通过 [WezTerm](https://wezm.dev/) 把它们重新开成标签页。
+一个 [Pi](https://github.com/earendil-works/pi) 扩展 + CLI，面向**关闭终端后的会话恢复（session resume / restore）**：实时登记打开的 Pi，通过 [WezTerm](https://wezterm.org/) 重新开成标签页，跳过仍在运行的会话。
+
+## 恢复一个会话，还是恢复整个工作区？
+
+| 需求 | 使用方式 |
+| --- | --- |
+| 继续当前目录最近的会话 | Pi 原生 `pi -c` |
+| 从历史对话中选择一个 | Pi 原生 `pi -r` 或 `/resume` |
+| 重开 WezTerm 后恢复跨项目的已登记 Pi 会话 | `pi-reopen` |
+| 先预览，不打开标签页 | `pi-reopen restore --dry-run` |
+
+它负责**重新启动进程并加载原对话**，不是历史会话选择器，也不会恢复运行中的工具、未保存状态、分屏几何布局或其他 Shell 程序。主动退出 Pi 会移除登记。它不会在启动 WezTerm 时自动执行；重开终端后运行 `pi-reopen` 即可。
+
+## 快速开始
+
+**1.0.2 发布版**的主包为 `pi-reopen`，`@ellieyujin/pi-reopen` 保留为兼容发行包。1.0.2 发布之前，请将以下两条安装命令中的包名替换为 scoped 名称；不要同时安装两个发行包。
+
+```bash
+pi install npm:pi-reopen@latest
+npm install -g pi-reopen@latest --omit=peer
+pi-reopen doctor
+```
+
+在已有 Pi 会话中运行 `/reload` 开始登记。关闭并重新打开 WezTerm 后：
+
+```bash
+pi-reopen restore --dry-run
+pi-reopen
+```
+
+切换包名前请阅读[安装与迁移说明](#安装)。
 
 ## 环境要求
 
@@ -74,11 +102,11 @@ Pi 内等价入口：
 
 ### 从 npm 安装
 
-使用完整包名 `@ellieyujin/pi-reopen` 和稳定版 `latest` dist-tag。无 scope 的 `pi-workspace` 属于其他作者的项目。
+1.0.2 及以后使用主包 `pi-reopen` 和稳定版 `latest` dist-tag；该版本发布前请替换为 `@ellieyujin/pi-reopen`。无 scope 的 `pi-workspace` 属于其他作者的项目。
 
 ```bash
-pi install npm:@ellieyujin/pi-reopen@latest
-npm install -g @ellieyujin/pi-reopen@latest --omit=peer
+pi install npm:pi-reopen@latest
+npm install -g pi-reopen@latest --omit=peer
 pi-reopen doctor
 ```
 
@@ -88,13 +116,26 @@ pi-reopen doctor
 
 **登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的 `open-all.ts` 副本/符号链接；迁移前用 `pi list` 和个人扩展目录核对，只禁用旧入口，不要删除会话或认证文件。
 
+### 切换到短包名（发布后）
+
+`pi-reopen` 与 `@ellieyujin/pi-reopen` 计划发布同一实现。**只加载一个**：Pi 将不同 npm 名称视为不同包。先用 `pi list` 查看并移除原来的精确来源；以下示例适用于通过 `@latest` 安装的用户：
+
+```bash
+pi remove npm:@ellieyujin/pi-reopen@latest
+npm uninstall -g @ellieyujin/pi-reopen
+pi install npm:pi-reopen@latest
+npm install -g pi-reopen@latest --omit=peer
+```
+
+重启 Pi 后执行 `pi-reopen doctor`。对话文件与 `~/.pi/agent/pi-reopen/` 登记路径不变，不要删除它们。老用户也可以继续使用 scoped 发行包；CLI 与扩展应保持同版本。不要同时加载本地 `open-all.ts` 软链与 npm 包。
+
 ### 从源码安装
 
 以下命令在 Linux/macOS/WSL 上安装当前检出的源码：
 
 ```bash
-git clone https://github.com/AuthurX/pi-workspace.git
-cd pi-workspace
+git clone https://github.com/AuthurX/pi-reopen.git
+cd pi-reopen
 pi install .
 mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/bin/pi-reopen.js" "$HOME/.local/bin/pi-reopen"
@@ -117,7 +158,7 @@ node .\bin\pi-reopen.js
 只装扩展也可以直接安装已推送的 Git 版本：
 
 ```bash
-pi install git:github.com/AuthurX/pi-workspace
+pi install git:github.com/AuthurX/pi-reopen
 ```
 
 ## 可选配置
@@ -146,7 +187,7 @@ Linux/macOS/WSL 会从 PATH 和 Bash 登录环境定位 Pi。Windows 原生从 P
 
 ## 工作原理
 
-![How it works](https://raw.githubusercontent.com/AuthurX/pi-workspace/main/assets/how-it-works.png)
+![How it works](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/how-it-works.png)
 
 - **登记**：每次 Pi 启动时把 `{会话文件绝对路径, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` 实时写入 `~/.pi/agent/pi-reopen/members/`（每会话一个文件，原子替换）。0.3.0 及更早版本写在 `pi-workspace/` 下的记录仍可读取与清理。
 - **关闭判定**：Pi 的信号退出也会发出 `quit` 清理事件，事件名本身不可靠。扩展在 TUI 生命周期内记录 SIGHUP/SIGTERM；无信号的主动 `/quit` 或切换会话删除记录；reload 保留记录并清理监听器。没有受跟踪信号时，再向 WezTerm 查询当前 pane（`WEZTERM_PANE`）是否还存在：pane 已消失说明窗口被关闭，记录保留。硬杀导致无清理时，残留记录会被恢复。断电时最多恢复已落盘的记录，最新未落盘的改动不保证。
@@ -183,6 +224,10 @@ docs/                    需求、状态、平台、终端适配器、发布说�
 CI 在 Linux/macOS/Windows 跑平台测试集、在 Linux 跑完整回归、校验打包实物，并运行真实 Pi PTY 生命周期（会安装 Pi 宿主）。CI 无法打开 WezTerm GUI，真实开标签页/标题测试仍需 `PI_REOPEN_INTEGRATION=1` 手动启用。
 
 维护者发布步骤见[发布指南](docs/PUBLISHING.md)与 [CHANGELOG](CHANGELOG.md)。
+
+## 反馈与分享
+
+如果它解决了你的终端重启问题，欢迎向 Pi / WezTerm 用户分享[项目地址](https://github.com/AuthurX/pi-reopen)。[反馈恢复问题](https://github.com/AuthurX/pi-reopen/issues)时，请提供系统、Pi/WezTerm 版本和**脱敏后的** `pi-reopen doctor` 输出，不要上传凭据或私密对话。维护者可参考[推广文案与效果记录方案](https://github.com/AuthurX/pi-reopen/blob/main/docs/promotion/README.md)。
 
 ## 贡献者
 

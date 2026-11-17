@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ const REQUIRED = [
 	"package.json",
 	"LICENSE",
 	"README.md",
+	"README.zh-CN.md",
 	"CHANGELOG.md",
 	"bin/pi-reopen.js",
 	"extensions/open-all.ts",
@@ -26,7 +27,7 @@ const REQUIRED = [
 	"src/i18n.js",
 	"docs/PLATFORMS.md",
 ];
-const FORBIDDEN = [/node_modules/, /\.env$/, /\.tgz$/, /sessions\//, /pi-workspace\//, /members\//, /test\//];
+const FORBIDDEN = [/node_modules/, /\.env$/, /\.tgz$/, /sessions\//, /pi-workspace\//, /members\//, /test\//, /^docs\/promotion\//, /^scripts\//];
 
 function fail(message) {
 	console.error(`✖ ${message}`);
@@ -52,6 +53,15 @@ try {
 
 	execFileSync("tar", ["-xzf", join(work, filename), "-C", work]);
 	const pkgDir = join(work, "package");
+	const sourceManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+	const manifest = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
+	assert.equal(manifest.name, "pi-reopen");
+	assert.equal(manifest.version, sourceManifest.version);
+	assert.equal(manifest.repository.url, "git+https://github.com/AuthurX/pi-reopen.git");
+	assert.ok(manifest.keywords.includes("pi-package"));
+	for (const entry of [...manifest.pi.extensions, ...Object.values(manifest.bin)]) {
+		assert.ok(existsSync(join(pkgDir, entry)), `missing entrypoint: ${entry}`);
+	}
 	mkdirSync(home, { recursive: true });
 	// 可执行脚本夹具：让预检在任意 CI 上都能通过，不依赖真实 WezTerm/pi。
 	const bin = join(home, "bin");

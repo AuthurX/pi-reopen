@@ -49,12 +49,23 @@ jobs:
         run: |
           PKG_NAME="$(node -p "require('./package.json').name")"
           PKG_VERSION="$GITHUB_REF_NAME"
-          if npm view "${PKG_NAME}@${PKG_VERSION#v}" version >/dev/null 2>&1; then
+          if npm view "${PKG_NAME}@${PKG_VERSION#v}" version --json > "$RUNNER_TEMP/npm-view.json"; then
             echo "${PKG_NAME}@${PKG_VERSION#v} is already on npm; skipping"
           else
-            # 预发布版本 (如 v0.2.0-dev.4) → dist-tag next;正式版 → latest
+            # Only a missing version permits publishing; auth/network failures stop the job.
+            jq -e '.error.code == "E404"' "$RUNNER_TEMP/npm-view.json"
             if [[ "$PKG_VERSION" == *-* ]]; then TAG=next; else TAG=latest; fi
             npm publish --provenance --tag "$TAG"
+          fi
+
+      - name: Publish scoped compatibility distribution
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@ellieyujin/pi-reopen@$VERSION" version --json > "$RUNNER_TEMP/npm-legacy-view.json"; then
+            echo "Scoped distribution already published; skipping"
+          else
+            jq -e '.error.code == "E404"' "$RUNNER_TEMP/npm-legacy-view.json"
+            npm run publish-legacy -- --provenance
           fi
 
       - name: Create GitHub release

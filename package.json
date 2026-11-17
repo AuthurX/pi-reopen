@@ -1,15 +1,15 @@
 {
-  "name": "@ellieyujin/pi-reopen",
+  "name": "pi-reopen",
   "license": "MIT",
-  "version": "1.0.0",
-  "description": "Restore recorded Pi sessions in WezTerm tabs on Linux, macOS, Windows and WSL; includes a Pi extension and standalone CLI.",
+  "version": "1.0.2",
+  "description": "Resume and restore your Pi coding agent sessions as WezTerm tabs after the terminal closes. Registers open Pi sessions and reopens them with original cwd and conversation. Linux, macOS, Windows, WSL.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AuthurX/pi-workspace.git"
+    "url": "git+https://github.com/AuthurX/pi-reopen.git"
   },
-  "homepage": "https://github.com/AuthurX/pi-workspace#readme",
+  "homepage": "https://github.com/AuthurX/pi-reopen#readme",
   "bugs": {
-    "url": "https://github.com/AuthurX/pi-workspace/issues"
+    "url": "https://github.com/AuthurX/pi-reopen/issues"
   },
   "publishConfig": {
     "access": "public",
@@ -20,9 +20,25 @@
   "keywords": [
     "pi-package",
     "pi-extension",
+    "pi",
+    "pi-coding-agent",
+    "pi-reopen",
+    "resume",
+    "session",
+    "session-resume",
+    "session-recovery",
     "workspace",
+    "restore",
+    "restore-session",
+    "continue",
     "wezterm",
-    "wsl"
+    "terminal",
+    "tabs",
+    "multiplexer",
+    "wsl",
+    "windows",
+    "linux",
+    "macos"
   ],
   "engines": {
     "node": ">=22.19.0"
@@ -34,13 +50,14 @@
     "README.md",
     "README.zh-CN.md",
     "CHANGELOG.md",
-    "docs"
+    "docs",
+    "!docs/promotion"
   ],
   "pi": {
     "extensions": [
       "./extensions/open-all.ts"
     ],
-    "image": "https://raw.githubusercontent.com/AuthurX/pi-workspace/main/assets/preview.png"
+    "image": "https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/preview.png"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=1.5.0",
@@ -54,6 +71,8 @@
     "test:platform": "node --test test/platforms.test.mjs test/extension.test.mjs test/recent.test.mjs",
     "test:integration": "PI_REOPEN_INTEGRATION=1 node --test test/integration.test.mjs",
     "verify-pack": "node scripts/verify-pack.mjs",
+    "publish-legacy": "node scripts/publish-legacy.mjs",
+    "discovery-report": "node scripts/discovery-report.mjs",
     "prepublishOnly": "npm test"
   }
 }
