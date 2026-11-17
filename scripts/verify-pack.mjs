@@ -20,7 +20,7 @@ const REQUIRED = [
 	"README.zh-CN.md",
 	"CHANGELOG.md",
 	"bin/pi-reopen.js",
-	"extensions/open-all.ts",
+	"extensions/index.ts",
 	"src/cli.js",
 	"src/restore.js",
 	"src/terminals/wezterm.js",

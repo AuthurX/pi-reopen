@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4 — 2026-11-18
+
+- Pi 扩展入口由 `extensions/open-all.ts` 更名为 `extensions/index.ts`：npm 包安装后 Pi 扩展列表显示 `@ellieyujin/pi-reopen`，本地目录安装显示 `pi-reopen`；升级后需手动禁用或移除旧的本地 `open-all.ts` 入口。
+- 后台 PowerShell 系统/进程查询禁用进度输出，并显式捕获 stderr，避免 CLIXML 及乱码直接输出到终端；保留原有查询失败处理，不改变 WezTerm 连接与 Pi 交互启动方式。
+
 ## 1.0.3 — 2026-11-17
 
 - 统一以 `@ellieyujin/pi-reopen` 为唯一 npm 发行包；移除双包发布脚本与 CI 步骤，同步安装、迁移和发布文档。CLI 名称与会话登记目录不变。

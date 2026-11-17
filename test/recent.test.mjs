@@ -61,7 +61,7 @@ async function loadRecent(t) {
   process.env.PI_WORKSPACE_RECENT_NOWAIT = '1';
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');
 
-  const raw = fs.readFileSync(join(project, 'extensions/open-all.ts'), 'utf8');
+  const raw = fs.readFileSync(join(project, 'extensions/index.ts'), 'utf8');
   const source = stripTypeScriptTypes(raw)
     .replace('import { Key } from "@earendil-works/pi-tui";', 'const Key = { ctrlShift: (k) => `ctrl+shift+${k}` };');
   const tempFile = join(home, 'open-all.recent.mjs');

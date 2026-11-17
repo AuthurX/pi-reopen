@@ -130,7 +130,7 @@ pi-reopen doctor
 - CLI 不依赖 Pi 的 peer 包，因此用 `--omit=peer` 避免额外安装宿主；两处安装需分别更新并保持同一版本（`pi-reopen doctor` 会报告版本不一致）
 - `pi install` 只声明最低 peer 版本（`>=1.5.0`），不设上界：任何更新的 Pi 版本都可以直接安装
 
-**登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的 `open-all.ts` 副本/符号链接；迁移前用 `pi list` 和个人扩展目录核对，只禁用旧入口，不要删除会话或认证文件。
+**登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的本地扩展入口（例如 `open-all.ts` 符号链接或单独的 `pi-reopen` 副本）；迁移前用 `pi list` 和个人扩展目录核对，只禁用旧入口，不要删除会话或认证文件。
 
 ### 从已撤包的短包名迁移
 
@@ -143,7 +143,7 @@ pi install npm:@ellieyujin/pi-reopen@latest
 npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 ```
 
-重启 Pi 后执行 `pi-reopen doctor`。对话文件与 `~/.pi/agent/pi-reopen/` 登记路径不变，不要删除它们。CLI 与扩展应保持同版本。不要同时加载本地 `open-all.ts` 软链与 npm 包。
+重启 Pi 后执行 `pi-reopen doctor`。对话文件与 `~/.pi/agent/pi-reopen/` 登记路径不变，不要删除它们。CLI 与扩展应保持同版本。不要同时加载本地扩展软链（例如 `open-all.ts` 或 `pi-reopen`）与 npm 包。
 
 ### 从源码安装
 
@@ -225,7 +225,7 @@ python3 test/pty-shutdown.py # 真实 Pi PTY：信号退出保留记录，主动
 ```
 
 ```text
-extensions/open-all.ts   Pi 扩展（薄适配层）：登记存活 Pi，提供 /reopen
+extensions/index.ts      Pi 扩展（薄适配层）：登记存活 Pi，提供 /reopen
 src/                     共享核心（纯 JS ESM，扩展与 CLI 共用）
   terminals/             终端适配器（wezterm；见 docs/TERMINALS.md）
   platform/windows/paths/liveness/members/claims/plan/preflight/discover/

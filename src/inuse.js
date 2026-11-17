@@ -88,8 +88,8 @@ export function scanSessionOwners({
 		try {
 			const script = "$ErrorActionPreference = 'Stop'; " +
 				"Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress";
-			const out = String(execFile(powershellPath(env), powershellArgs(script), {
-				encoding: "utf8", timeout: 15_000, windowsHide: true, env,
+			const out = String(execFile(powershellPath(env), powershellArgs(script, { probe: true }), {
+				encoding: "utf8", timeout: 15_000, windowsHide: true, stdio: "pipe", env,
 			}));
 			const list = JSON.parse(out);
 			for (const proc of Array.isArray(list) ? list : [list]) {

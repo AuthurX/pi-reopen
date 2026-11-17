@@ -130,7 +130,7 @@ pi-reopen doctor
 - The CLI does not depend on Pi's peer packages, hence `--omit=peer` to avoid installing the host as well; the two installs must be updated separately and kept at the same version (`pi-reopen doctor` reports drift)
 - `pi install` declares only a minimum peer version (`>=1.5.0`), with no upper bound: any newer Pi can be installed directly
 
-**Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load an old `open-all.ts` copy/symlink at the same time as the package; before migrating, check `pi list` and the personal extension directory, disable the old entry only, and do not delete session or auth files.
+**Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load a stale local extension entry (for example an old `open-all.ts` symlink or a separate `pi-reopen` copy) at the same time as the package; before migrating, check `pi list` and the personal extension directory, disable the old entry only, and do not delete session or auth files.
 
 ### Migrating from the unpublished package
 
@@ -143,7 +143,7 @@ pi install npm:@ellieyujin/pi-reopen@latest
 npm install -g @ellieyujin/pi-reopen@latest --omit=peer
 ```
 
-Restart Pi, then run `pi-reopen doctor`. Session files and `~/.pi/agent/pi-reopen/` registrations are unchanged; do not delete them. CLI and extension versions should match. Do not combine a local `open-all.ts` link with the npm package.
+Restart Pi, then run `pi-reopen doctor`. Session files and `~/.pi/agent/pi-reopen/` registrations are unchanged; do not delete them. CLI and extension versions should match. Do not combine a local extension link (for example an old `open-all.ts` or a `pi-reopen` symlink) with the npm package.
 
 ### From source
 
@@ -225,7 +225,7 @@ python3 test/pty-shutdown.py # real Pi PTY: signal keeps the record, /quit remov
 ```
 
 ```text
-extensions/open-all.ts   Pi extension (thin adapter layer): registers live Pis, provides /reopen
+extensions/index.ts      Pi extension (thin adapter layer): registers live Pis, provides /reopen
 src/                     shared core (pure JS ESM, used by both extension and CLI)
   terminals/             terminal adapters (wezterm; see docs/TERMINALS.md)
   platform/windows/paths/liveness/members/claims/plan/preflight/discover/

@@ -119,7 +119,7 @@ test('relocated package loads without PI_WORKSPACE_SRC or a personal fallback', 
   fs.cpSync(join(project, 'src'), join(root, 'src'), { recursive: true });
   fs.mkdirSync(join(root, 'extensions'));
   fs.writeFileSync(join(root, 'package.json'), '{"type":"module"}');
-  const raw = fs.readFileSync(join(project, 'extensions/open-all.ts'), 'utf8');
+  const raw = fs.readFileSync(join(project, 'extensions/index.ts'), 'utf8');
   assert.doesNotMatch(raw, /FALLBACK_SRC|\/home\/ellie\//);
   const source = stripTypeScriptTypes(raw).replace('import { Key } from "@earendil-works/pi-tui";',
     'const Key = { ctrlShift: k => `ctrl+shift+${k}` };');

@@ -53,7 +53,7 @@ currentPaneId(env) -> number | undefined
 
 - `preflight` 调 `discover` 和终端自身的 `--version` / `cli list` 探测（目前探测逻辑在适配器外部，WezTerm 专属）。
 - `runRestore` 通过 `spawn.openTab` 调 `spawnTab`，通过 `pane.setTabTitle` 调 `setTabTitle`。
-- 关窗判定（`extensions/open-all.ts`）通过 `pane.currentPaneId` + `paneExists` 区分“主动 /quit”与“窗口被关闭”。
+- 关窗判定（`extensions/index.ts`）通过 `pane.currentPaneId` + `paneExists` 区分“主动 /quit”与“窗口被关闭”。
 
 ## 现有实现
 

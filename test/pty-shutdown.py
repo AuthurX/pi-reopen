@@ -35,7 +35,7 @@ def check(action):
                 env.pop(key, None)
             os.execve(pi, [pi, '--offline', '--no-extensions', '--no-mcp', '--no-skills',
                            '--no-context-files', '--no-approve', '--extension',
-                           str(project / 'extensions/open-all.ts'), '--session', str(session)], env)
+                           str(project / 'extensions/index.ts'), '--session', str(session)], env)
         exited = False
         output = bytearray()
 

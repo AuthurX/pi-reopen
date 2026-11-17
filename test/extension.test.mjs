@@ -33,7 +33,7 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');
   process.env.PI_WORKSPACE_HOOKS = join(project, 'test', 'fixtures', hooks);
 
-  const raw = fs.readFileSync(join(project, 'extensions/open-all.ts'), 'utf8');
+  const raw = fs.readFileSync(join(project, 'extensions/index.ts'), 'utf8');
   const source = stripTypeScriptTypes(raw)
     // 测试环境没有宿主提供的 pi-tui；替换为等价最小实现
     .replace('import { Key } from "@earendil-works/pi-tui";', 'const Key = { ctrlShift: (k) => `ctrl+shift+${k}` };');

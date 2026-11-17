@@ -18,6 +18,7 @@ export function powershellPath(env = process.env) {
 	return win32.join(envValue(env, "SystemRoot") || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
-export function powershellArgs(script) {
+export function powershellArgs(script, { probe = false } = {}) {
+	if (probe) script = "$ProgressPreference = 'SilentlyContinue'; " + script;
 	return ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")];
 }

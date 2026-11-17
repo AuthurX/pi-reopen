@@ -8,6 +8,7 @@ import { runtimePlatform, powershellArgs, powershellPath } from '../src/platform
 import { discoverWezterm } from '../src/discover.js';
 import { discoverWindowsPi, buildWindowsScript, powershellQuote } from '../src/windows.js';
 import { currentBootId, processStart, isLive } from '../src/liveness.js';
+import { scanSessionOwners, normalizeSessionPath } from '../src/inuse.js';
 import * as i18n from '../src/i18n.js';
 import { preflight } from '../src/preflight.js';
 import { openTab } from '../src/spawn.js';
@@ -23,6 +24,53 @@ function fixture(t) {
 }
 
 const nativePlatform = process.platform;
+
+test('PowerShell probe arguments suppress progress without changing interactive launch scripts', () => {
+  const script = "Write-Progress -Activity 'probe'; 'ok'";
+  const decode = args => Buffer.from(args.at(-1), 'base64').toString('utf16le');
+  assert.equal(decode(powershellArgs(script)), script);
+  assert.equal(decode(powershellArgs(script, { probe: true })), "$ProgressPreference = 'SilentlyContinue'; " + script);
+});
+
+test('Windows background queries capture stderr and preserve success and failure semantics', () => {
+  const calls = [];
+  const file = join(tmpdir(), 'pi-probe-session.jsonl');
+  const execFile = (program, args, options) => {
+    calls.push({ program, args, options });
+    const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');
+    return script.includes('Win32_Process')
+      ? JSON.stringify([{ ProcessId: 9876, CommandLine: `node pi --session "${file}"` }])
+      : '638900000000000000\r\n';
+  };
+  const deps = { platform: 'win32', execFile };
+  assert.equal(currentBootId(undefined, deps), 'win32:638900000000000000');
+  assert.equal(processStart(42, undefined, deps), '638900000000000000');
+  assert.equal(scanSessionOwners({ ...deps, selfPid: 1 }).get(normalizeSessionPath(file)), 9876);
+  assert.equal(calls.length, 3);
+  for (const { args, options } of calls) {
+    assert.equal(options.stdio, 'pipe');
+    const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');
+    assert.ok(script.startsWith("$ProgressPreference = 'SilentlyContinue'; "));
+    assert.ok(script.includes("$ErrorActionPreference = 'Stop'"));
+  }
+  const failed = { platform: 'win32', execFile: () => { throw Object.assign(new Error('probe failed'), { status: 1, stderr: '#< CLIXML' }); } };
+  assert.equal(currentBootId(undefined, failed), undefined);
+  assert.equal(processStart(42, undefined, failed), undefined);
+  assert.equal(scanSessionOwners(failed).size, 0);
+});
+
+test('real Windows PowerShell probes suppress progress but retain error status and stderr', { skip: nativePlatform !== 'win32' }, () => {
+  const run = script => spawnSync(powershellPath(), powershellArgs(script, { probe: true }), {
+    encoding: 'utf8', timeout: 15000, windowsHide: true,
+  });
+  const ok = run("Write-Progress -Activity 'probe' -Status 'test' -PercentComplete 50; 'ok'");
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(ok.stdout.trim(), 'ok');
+  assert.equal(ok.stderr, '');
+  const failed = run("$ErrorActionPreference = 'Stop'; Write-Error 'probe-failure'");
+  assert.equal(failed.status, 1);
+  assert.match(failed.stderr, /probe-failure/);
+});
 
 test('platform selection keeps native Windows/macOS separate from inherited WSL variables', () => {
   assert.equal(runtimePlatform({ WSL_DISTRO_NAME: 'Arch' }, 'linux'), 'wsl');

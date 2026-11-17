@@ -5,7 +5,7 @@ import { powershellArgs, powershellPath } from "./platform.js";
 const readText = (p) => readFileSync(p, "utf8");
 function query(program, args, execFile) {
 	return String(execFile(program, args, {
-		encoding: "utf8", timeout: 8000, windowsHide: true,
+		encoding: "utf8", timeout: 8000, windowsHide: true, stdio: "pipe",
 		env: { ...process.env, LC_ALL: "C" },
 	})).trim();
 }
@@ -22,7 +22,7 @@ export function currentBootId(readFile = readText, { platform = process.platform
 			const match = /sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)/.exec(value);
 			if (match) boot = `darwin:${match[1]}:${match[2]}`;
 		} else if (platform === "win32") {
-			const value = query(powershellPath(), powershellArgs("$ErrorActionPreference = 'Stop'; (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().Ticks.ToString()"), execFile);
+			const value = query(powershellPath(), powershellArgs("$ErrorActionPreference = 'Stop'; (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().Ticks.ToString()", { probe: true }), execFile);
 			if (/^\d+$/.test(value)) boot = `win32:${value}`;
 		}
 		if (execFile === execFileSync && boot) cachedBootId = boot;
@@ -42,7 +42,7 @@ export function processStart(pid, readFile = readText, { platform = process.plat
 			return match && !match[1].includes("Z") ? match[2].replace(/\s+/g, " ") : undefined;
 		}
 		if (platform === "win32") {
-			const value = query(powershellPath(), powershellArgs(`$ErrorActionPreference = 'Stop'; (Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks.ToString()`), execFile);
+			const value = query(powershellPath(), powershellArgs(`$ErrorActionPreference = 'Stop'; (Get-Process -Id ${pid}).StartTime.ToUniversalTime().Ticks.ToString()`, { probe: true }), execFile);
 			return /^\d+$/.test(value) ? value : undefined;
 		}
 		if (platform !== "linux") return undefined;
