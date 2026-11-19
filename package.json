@@ -1,7 +1,7 @@
 {
   "name": "@ellieyujin/pi-reopen",
   "license": "MIT",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Resume and restore your Pi coding agent sessions as WezTerm tabs after the terminal closes. Registers open Pi sessions and reopens them with original cwd and conversation. Linux, macOS, Windows, WSL.",
   "repository": {
     "type": "git",

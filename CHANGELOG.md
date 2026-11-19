@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7 — 2026-11-19
+
+- 重绘双语 README “How It Works” 图：奶油底 + 网格 + 五色卡片风格（深海军蓝 / 淡紫 / 薄荷绿 / 淡蓝 / 琥珀），卡片内文字放大，恢复勾选标记重绘为圆头对勾；`assets/gen_how_it_works.py` 同步更新。无运行时逻辑变更。
+
 ## 1.0.6 — 2026-11-19
 
 - 更新双语 README 首页预览图：英文版 `assets/preview.png` 与新增中文版 `assets/preview.zh.png`（1280×720 海报，2x 导出）；中文版 README 首页图改用 `preview.zh.png`。
