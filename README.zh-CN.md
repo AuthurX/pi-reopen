@@ -4,7 +4,7 @@
 
 **一条命令恢复之前打开的 Pi coding agent 会话、工作目录与对话，不必逐个寻找历史记录。**
 
-![Pi 会话恢复预览](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/preview.png)
+![Pi 会话恢复预览](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/preview.zh.png)
 
 一个 [Pi](https://github.com/earendil-works/pi) 扩展 + CLI，面向**关闭终端后的会话恢复（session resume / restore）**：实时登记打开的 Pi，通过 [WezTerm](https://wezterm.org/) 重新开成标签页，跳过仍在运行的会话。
 

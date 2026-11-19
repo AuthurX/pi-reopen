@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6 — 2026-11-19
+
+- 更新双语 README 首页预览图：英文版 `assets/preview.png` 与新增中文版 `assets/preview.zh.png`（1280×720 海报，2x 导出）；中文版 README 首页图改用 `preview.zh.png`。
+
 ## 1.0.5 — 2026-11-19
 
 - 新增 `PI_REOPEN_FORGET_ON_TAB_CLOSE`（`1`/`true`，默认关闭）：启用后，被动死亡（关窗）时若 WezTerm 里还有其他 pane，视为“关单个 tab = 任务完成”，删除登记记录；无其他 pane（关整个终端）或无法判断时仍保留记录、照常可恢复。对齐浏览器“关掉的 tab 不进恢复集”模型；误关可用 `/reopen recent` 在 24 小时内补回。
