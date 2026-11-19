@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5 — 2026-11-19
+
+- 新增 `PI_REOPEN_FORGET_ON_TAB_CLOSE`（`1`/`true`，默认关闭）：启用后，被动死亡（关窗）时若 WezTerm 里还有其他 pane，视为“关单个 tab = 任务完成”，删除登记记录；无其他 pane（关整个终端）或无法判断时仍保留记录、照常可恢复。对齐浏览器“关掉的 tab 不进恢复集”模型；误关可用 `/reopen recent` 在 24 小时内补回。
+- 修复：`otherPanesExist` 在无法确定自身 pane（如 `WEZTERM_PANE` 缺失）或存在坏 pane 条目时误判“还有其他 pane”，导致误删登记记录；现在按“无法判断”保守保留。
+
 ## 1.0.4 — 2026-11-18
 
 - Pi 扩展入口由 `extensions/open-all.ts` 更名为 `extensions/index.ts`：npm 包安装后 Pi 扩展列表显示 `@ellieyujin/pi-reopen`，本地目录安装显示 `pi-reopen`；升级后需手动禁用或移除旧的本地 `open-all.ts` 入口。

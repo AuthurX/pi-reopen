@@ -15,6 +15,7 @@ import { CLAIM_TTL_MS, claimSession, readClaim, releaseClaim, sweepClaims } from
 import { buildRestorePlan, matchesOnly, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { parsePaneId, sanitizeTitle } from '../src/pane.js';
+import { otherPanesExist } from '../src/terminals/wezterm.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
 import { EXIT, defaultWaitTimeoutMs, exitCodeFor, inspect, label, runRestore, summarize, tabTitle } from '../src/restore.js';
@@ -356,6 +357,16 @@ test('tab titles prefer the session name, then the cwd basename, and are sanitiz
   assert.equal(sanitizeTitle('a\nb\tc'), 'a b c');
   assert.equal(sanitizeTitle('   '), undefined);
   assert.equal([...sanitizeTitle('x'.repeat(100))].length, 60);
+});
+
+test('otherPanesExist reports other panes and is inconclusive when it cannot tell', () => {
+  const list = (panes) => ({ status: 0, stdout: JSON.stringify(panes) });
+  assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => list([{ pane_id: 42 }, { pane_id: 7 }]) }), true);
+  assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => list([{ pane_id: 42 }]) }), false);
+  assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => list([]) }), false);
+  assert.equal(otherPanesExist(undefined, { wezterm: 'w', runner: () => list([{ pane_id: 7 }]) }), undefined, '自己的 pane 未知 → 无法判断 → 保留记录');
+  assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => ({ status: 1, stdout: '' }) }), undefined, 'cli 失败 → 无法判断');
+  assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => list([{ pane_id: 42 }, null]) }), false, '坏条目不算其他 pane');
 });
 
 test('restore sets a tab title from the spawn pane id', async (t) => {

@@ -218,13 +218,41 @@ export default async function (pi: ExtensionAPI) {
 		}
 	}
 
+	/**
+	 * “关单个 tab = 任务完成”（PI_REOPEN_FORGET_ON_TAB_CLOSE=1）：
+	 * 仅当确认 WezTerm 里还有其他 pane 时才删记录（浏览器“关掉的 tab 不进恢复集”模型）；
+	 * 没有其他 pane（关整个终端/崩溃）或无法判断 → 保守保留记录，等下次恢复。
+	 */
+	async function forgetIfSingleTabClosed(): Promise<boolean> {
+		const raw = (envCompatValue("PI_REOPEN_FORGET_ON_TAB_CLOSE") ?? "").trim().toLowerCase();
+		if (!["1", "true", "on", "yes"].includes(raw)) return false;
+		const paneId = pane.currentPaneId(process.env);
+		try {
+			const hooks = await loadHooks();
+			// 关整个 WezTerm 时其他 pane 在关闭过程中短暂残留；稍等以区分“稳定”与“过渡”。
+			await new Promise<void>((resolve) => setTimeout(resolve, hooks.forgetDelayMs ?? 500));
+			const probe = typeof hooks.otherPanesExists === "function"
+				? hooks.otherPanesExists
+				: (id: number | undefined) => pane.otherPanesExist(id, { wezterm: envCompatValue("PI_REOPEN_WEZTERM"), env: process.env });
+			return probe(paneId) === true;
+		} catch {
+			return false; // 无法判断就保留记录：宁可多恢复一次，不丢会话
+		}
+	}
+
 	pi.on("session_shutdown", async (event: any) => {
 		// Pi also emits quit for SIGHUP/SIGTERM. Let all signal listeners run first.
 		if (event.reason === "quit") await new Promise<void>((resolve) => setImmediate(resolve));
 		try {
 			if (!currentSessionId || event.reason === "reload") return;
-			if (event.reason === "quit" && signalExit) return;
-			if (event.reason === "quit" && (await paneGone())) return;
+			if (event.reason === "quit" && signalExit) {
+				if (await forgetIfSingleTabClosed()) members.deleteMember(currentSessionId, paths);
+				return;
+			}
+			if (event.reason === "quit" && (await paneGone())) {
+				if (await forgetIfSingleTabClosed()) members.deleteMember(currentSessionId, paths);
+				return;
+			}
 			if (["quit", "new", "resume", "fork"].includes(event.reason)) {
 				members.deleteMember(currentSessionId, paths);
 			}

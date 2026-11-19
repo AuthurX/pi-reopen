@@ -19,6 +19,18 @@
 
 它负责**重新启动进程并加载原对话**，不是历史会话选择器，也不会恢复运行中的工具、未保存状态、分屏几何布局或其他 Shell 程序。主动退出 Pi 会移除登记。它不会在启动 WezTerm 时自动执行；重开终端后运行 `pi-reopen` 即可。
 
+## 怎么用：把它当浏览器标签页
+
+| 浏览器 | pi-reopen |
+| --- | --- |
+| 退出时还开着的 tab | 关 WezTerm 时还活着的 Pi 会话 |
+| 下次启动把开着的 tab 找回来 | `pi-reopen` 把保留的记录开成新 tab |
+| 自己关掉的 tab 不进恢复列表 | `ctrl+w` 关掉的 tab 会被遗忘（需开 `PI_REOPEN_FORGET_ON_TAB_CLOSE=1`；Pi 内 `/quit` 则总是遗忘） |
+| Ctrl+Shift+T"最近关闭" | `/reopen recent`——最近 24 小时，没有记录也能捞 |
+| 崩溃 → "要恢复吗?" | 崩溃 / 关整个 WezTerm / WSL 关机 → 全部保留，`pi-reopen` 全捞回来 |
+
+一句话记住：**开着 = 留，关掉 = 放走**。不用做任何标记——留着 tab 就是"我要它"，关掉就是"我干完了"。（默认：关 tab 也保留记录，绝不丢东西；设置 `PI_REOPEN_FORGET_ON_TAB_CLOSE=1` 获得浏览器式行为。）
+
 ## 适用场景与平台支持
 
 **适合这样的工作方式：你在 WezTerm 中为多个项目打开了 Pi 会话，关闭终端后，希望一次找回这些已登记会话的工作目录和对话。** 重新打开 WezTerm，再运行 `pi-reopen`，即可将待恢复会话重新开成标签页。
@@ -188,6 +200,7 @@ pi install git:github.com/AuthurX/pi-reopen
 | `PI_REOPEN_LANG` | 强制输出语言：`zh` 或 `en`（默认跟随 `LC_ALL`/`LANG`） |
 | `PI_REOPEN_TERMINAL` | 终端适配器 id；目前只实现 `wezterm`（见 [docs/TERMINALS.md](docs/TERMINALS.md)） |
 | `PI_REOPEN_MAX_AGE_DAYS` | 超过多少天的死记录不再自动恢复（默认 14，`0` 表示不限制） |
+| `PI_REOPEN_FORGET_ON_TAB_CLOSE` | 设置（`1`/`true`）后，关单个 tab（WezTerm 还有其他 tab）视为“任务完成”并删除记录；关整个终端或无法判断时仍保留记录（默认关闭） |
 
 旧变量名（`PI_WORKSPACE_*`）仍然生效；两者同时设置时以 `PI_REOPEN_*` 为准。
 
@@ -206,7 +219,7 @@ Linux/macOS/WSL 会从 PATH 和 Bash 登录环境定位 Pi。Windows 原生从 P
 ![How it works](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/how-it-works.png)
 
 - **登记**：每次 Pi 启动时把 `{会话文件绝对路径, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` 实时写入 `~/.pi/agent/pi-reopen/members/`（每会话一个文件，原子替换）。0.3.0 及更早版本写在 `pi-workspace/` 下的记录仍可读取与清理。
-- **关闭判定**：Pi 的信号退出也会发出 `quit` 清理事件，事件名本身不可靠。扩展在 TUI 生命周期内记录 SIGHUP/SIGTERM；无信号的主动 `/quit` 或切换会话删除记录；reload 保留记录并清理监听器。没有受跟踪信号时，再向 WezTerm 查询当前 pane（`WEZTERM_PANE`）是否还存在：pane 已消失说明窗口被关闭，记录保留。硬杀导致无清理时，残留记录会被恢复。断电时最多恢复已落盘的记录，最新未落盘的改动不保证。
+- **关闭判定**：Pi 的信号退出也会发出 `quit` 清理事件，事件名本身不可靠。扩展在 TUI 生命周期内记录 SIGHUP/SIGTERM；无信号的主动 `/quit` 或切换会话删除记录；reload 保留记录并清理监听器。没有受跟踪信号时，再向 WezTerm 查询当前 pane（`WEZTERM_PANE`）是否还存在：pane 已消失说明窗口被关闭，记录保留。设置 `PI_REOPEN_FORGET_ON_TAB_CLOSE=1` 后，pane 已消失但 WezTerm 还有其他 pane 时视为“关单个 tab = 任务完成”，删除记录（浏览器式“关掉的 tab 不进恢复集”）；无其他 pane 或无法判断时仍保留。硬杀导致无清理时，残留记录会被恢复。断电时最多恢复已落盘的记录，最新未落盘的改动不保证。
 - **安全启动**：标签页并发打开（默认同时 5 个）；每个 `wezterm cli spawn` 请求超过 15s 无响应会终止并报错，连续 3 次失败提前停止。`--limit` 限制批量规模。
 - **去重**：恢复前检查进程存活（pid + 启动时刻 + bootId，重启后的旧 PID 不会误判），并扫描运行中进程的 `--session <文件>`，避免对未登记的窗口重复开标签页；启动声明（60s TTL + 持有者存活检查）进一步减少重复请求。全局恢复锁（`restore.lock`，30 分钟 TTL + pid 存活 + bootId 校验）用 `O_EXCL` 原子创建，并发恢复不会同时开整批；持锁进程死亡或系统重启后可接管。
 - **确认**：“请求被接受”与“pi 已登记”分开报告；确认窗口随批量大小放大（15s + 每个会话 2s，上限 90s）。

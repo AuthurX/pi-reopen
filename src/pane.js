@@ -33,3 +33,10 @@ export function paneExists(paneId, { terminal = terminalId(), wezterm, program, 
 	if (!adapter) return undefined;
 	return adapter.paneExists(paneId, { program: program ?? wezterm, env, runner });
 }
+
+/** 除指定 pane 外是否还有其他 pane：true/false/undefined（无法判断）。 */
+export function otherPanesExist(excludePaneId, { terminal = terminalId(), wezterm, program, env = process.env, runner } = {}) {
+	const adapter = getTerminal(terminal);
+	if (!adapter) return undefined;
+	return adapter.otherPanesExist?.(excludePaneId, { program: program ?? wezterm, env, runner });
+}

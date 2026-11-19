@@ -24,7 +24,8 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
     }
     fs.rmSync(home, { recursive: true, force: true });
     for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM',
-      'WEZTERM_PANE', 'PI_WORKSPACE_PANE_ALIVE']) delete process.env[key];
+      'WEZTERM_PANE', 'PI_WORKSPACE_PANE_ALIVE', 'PI_WORKSPACE_OTHER_PANES',
+      'PI_WORKSPACE_FORGET_ON_TAB_CLOSE']) delete process.env[key];
   });
   process.env.PI_CODING_AGENT_DIR = join(home, '.pi', 'agent');
   process.env.PI_WORKSPACE_LANG = 'zh';
@@ -176,6 +177,34 @@ test('quit removes the member when the pane still exists (deliberate /quit)', as
   f.events.session_start({}, f.context);
   await f.events.session_shutdown({ reason: 'quit' }, f.context);
   assert.equal(f.memberCount(), 0, 'pane 还在 → 用户主动退出 → 排除');
+});
+
+test('forget-on-tab-close: closing one tab (other panes remain) removes the member', async (t) => {
+  const f = await loadExtension(t, { hooks: 'pane-hooks.mjs' });
+  process.env.WEZTERM_PANE = '42';
+  process.env.PI_WORKSPACE_FORGET_ON_TAB_CLOSE = '1';
+  process.env.PI_WORKSPACE_OTHER_PANES = '1';
+  f.events.session_start({}, f.context);
+  await f.events.session_shutdown({ reason: 'quit' }, f.context);
+  assert.equal(f.memberCount(), 0, '其他 tab 还在 → 单独关了这个 → 任务完成 → 删除');
+});
+
+test('forget-on-tab-close: closing the whole terminal (no other panes) keeps the member', async (t) => {
+  const f = await loadExtension(t, { hooks: 'pane-hooks.mjs' });
+  process.env.WEZTERM_PANE = '42';
+  process.env.PI_WORKSPACE_FORGET_ON_TAB_CLOSE = '1';
+  f.events.session_start({}, f.context);
+  await f.events.session_shutdown({ reason: 'quit' }, f.context);
+  assert.equal(f.memberCount(), 1, '没有其他 tab → 关整个终端 → 保留待恢复');
+});
+
+test('forget-on-tab-close off by default: pane gone keeps the member', async (t) => {
+  const f = await loadExtension(t, { hooks: 'pane-hooks.mjs' });
+  process.env.WEZTERM_PANE = '42';
+  process.env.PI_WORKSPACE_OTHER_PANES = '1';
+  f.events.session_start({}, f.context);
+  await f.events.session_shutdown({ reason: 'quit' }, f.context);
+  assert.equal(f.memberCount(), 1, '开关未开 → 行为不变，保留记录');
 });
 
 test('reload cleans up signal listeners without accumulating duplicates', async (t) => {

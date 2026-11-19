@@ -207,3 +207,26 @@ export function paneExists(paneId, { program, wezterm, env = process.env, runner
 	}
 }
 
+/**
+ * 判断除指定 pane 外是否还有别的 pane（终端是否还开着其他标签页）：
+ * true 还有其他 tab，false 一个 pane 都没有（整个终端没了），undefined 无法判断。
+ */
+export function otherPanesExist(excludePaneId, { program, wezterm, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
+	// 自己的 pane id 无效时无法排除自身：按“无法判断”处理，保守保留记录。
+	if (!Number.isSafeInteger(excludePaneId) || excludePaneId <= 0) return undefined;
+	const run = runner ?? ((executable, args) =>
+		spawnSync(executable, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
+	try {
+		const out = run(program || wezterm || "wezterm", ["cli", "list", "--format", "json"]);
+		if (out?.status !== 0) return undefined;
+		const panes = JSON.parse(String(out.stdout ?? ""));
+		if (!Array.isArray(panes)) return undefined;
+		return panes.some((pane) => {
+			const id = Number(pane?.pane_id);
+			return Number.isSafeInteger(id) && id !== excludePaneId;
+		});
+	} catch {
+		return undefined;
+	}
+}
+
