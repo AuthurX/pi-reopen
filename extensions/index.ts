@@ -54,6 +54,7 @@ export default async function (pi: ExtensionAPI) {
 	const i18n = await load("i18n.js");
 	const lang = i18n.resolveLang(process.env);
 	const preflightMod = await load("preflight.js");
+	const discoverMod = await load("discover.js");
 	const health = await load("health.js");
 	const version = await load("version.js");
 	const fs = await import("node:fs");
@@ -197,6 +198,18 @@ export default async function (pi: ExtensionAPI) {
 	}
 
 	/**
+	 * WezTerm 二进制：显式配置优先，否则走与 CLI 相同的发现逻辑
+	 * （WSL 下必须找到 Windows 侧 wezterm.exe，不能用 WSL PATH 里的 wezterm）。
+	 */
+	let weztermBinCache: string | undefined;
+	function resolveWeztermBin(): string | undefined {
+		if (weztermBinCache === undefined) {
+			weztermBinCache = envCompatValue("PI_REOPEN_WEZTERM") ?? discoverMod.discoverWezterm(process.env);
+		}
+		return weztermBinCache;
+	}
+
+	/**
 	 * 关窗判定的第二道保险：Pi 在 SIGHUP/SIGTERM 之外也可能发出 quit。
 	 * 此时若 WezTerm 里本 pane 已经消失，说明是窗口被关闭（被动死亡）而不是主动 /quit，
 	 * 记录必须保留，否则该会话会从恢复集合里永久丢失。
@@ -209,7 +222,7 @@ export default async function (pi: ExtensionAPI) {
 			const hooks = await loadHooks();
 			const probe = typeof hooks.paneExists === "function"
 				? hooks.paneExists
-				: (id: number) => pane.paneExists(id, { wezterm: envCompatValue("PI_REOPEN_WEZTERM"), env: process.env });
+				: (id: number) => pane.paneExists(id, { wezterm: resolveWeztermBin(), env: process.env });
 			const alive = await probe(paneId);
 			// false 或无法判断（undefined）都保守地按“已消失”处理：宁可多恢复一次，不丢会话。
 			return alive !== true;
@@ -219,13 +232,13 @@ export default async function (pi: ExtensionAPI) {
 	}
 
 	/**
-	 * “关单个 tab = 任务完成”（PI_REOPEN_FORGET_ON_TAB_CLOSE=1）：
+	 * “关单个 tab = 任务完成”（默认开启，PI_REOPEN_FORGET_ON_TAB_CLOSE=0 可退出）：
 	 * 仅当确认 WezTerm 里还有其他 pane 时才删记录（浏览器“关掉的 tab 不进恢复集”模型）；
 	 * 没有其他 pane（关整个终端/崩溃）或无法判断 → 保守保留记录，等下次恢复。
 	 */
 	async function forgetIfSingleTabClosed(): Promise<boolean> {
 		const raw = (envCompatValue("PI_REOPEN_FORGET_ON_TAB_CLOSE") ?? "").trim().toLowerCase();
-		if (!["1", "true", "on", "yes"].includes(raw)) return false;
+		if (["0", "false", "off", "no"].includes(raw)) return false;
 		const paneId = pane.currentPaneId(process.env);
 		try {
 			const hooks = await loadHooks();
@@ -233,7 +246,7 @@ export default async function (pi: ExtensionAPI) {
 			await new Promise<void>((resolve) => setTimeout(resolve, hooks.forgetDelayMs ?? 500));
 			const probe = typeof hooks.otherPanesExists === "function"
 				? hooks.otherPanesExists
-				: (id: number | undefined) => pane.otherPanesExist(id, { wezterm: envCompatValue("PI_REOPEN_WEZTERM"), env: process.env });
+				: (id: number | undefined) => pane.otherPanesExist(id, { wezterm: resolveWeztermBin(), env: process.env });
 			return probe(paneId) === true;
 		} catch {
 			return false; // 无法判断就保留记录：宁可多恢复一次，不丢会话

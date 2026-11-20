@@ -198,13 +198,14 @@ test('forget-on-tab-close: closing the whole terminal (no other panes) keeps the
   assert.equal(f.memberCount(), 1, '没有其他 tab → 关整个终端 → 保留待恢复');
 });
 
-test('forget-on-tab-close off by default: pane gone keeps the member', async (t) => {
+test('forget-on-tab-close: explicitly disabled (0) keeps the member', async (t) => {
   const f = await loadExtension(t, { hooks: 'pane-hooks.mjs' });
   process.env.WEZTERM_PANE = '42';
+  process.env.PI_WORKSPACE_FORGET_ON_TAB_CLOSE = '0';
   process.env.PI_WORKSPACE_OTHER_PANES = '1';
   f.events.session_start({}, f.context);
   await f.events.session_shutdown({ reason: 'quit' }, f.context);
-  assert.equal(f.memberCount(), 1, '开关未开 → 行为不变，保留记录');
+  assert.equal(f.memberCount(), 1, '显式关闭开关 → 保留记录');
 });
 
 test('reload cleans up signal listeners without accumulating duplicates', async (t) => {

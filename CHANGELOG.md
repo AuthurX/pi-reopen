@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.8 — 2026-11-20
+
+- `PI_REOPEN_FORGET_ON_TAB_CLOSE` 默认改为**开启**：关单个 tab（WezTerm 还有其他 tab）视为“任务完成”、删除登记记录；设置 `0`/`false`/`off`/`no` 可恢复“总是保留记录”的旧行为。关整个终端、崩溃或无法判断时仍保留记录，行为不变。
+- 修复：扩展的 pane 探测（`paneExists`/`otherPanesExist`）在未设置 `PI_REOPEN_WEZTERM` 时回退到 PATH 中的 `wezterm`，WSL 下会误用发行版内的 Linux wezterm；现与 CLI 共用同一发现逻辑（WSL 下自动定位 Windows 侧 wezterm.exe）。
+- 文档：`docs/PLATFORMS.md` 补充 WSL 下需在 Windows 侧 `WSLENV` 中加入 `WEZTERM_PANE`，否则 pane 探测不可用、forget-on-tab-close 退化为“总是保留记录”。
+
 ## 1.0.7 — 2026-11-19
 
 - 重绘双语 README “How It Works” 图：奶油底 + 网格 + 五色卡片风格（深海军蓝 / 淡紫 / 薄荷绿 / 淡蓝 / 琥珀），卡片内文字放大，恢复勾选标记重绘为圆头对勾；`assets/gen_how_it_works.py` 同步更新。无运行时逻辑变更。

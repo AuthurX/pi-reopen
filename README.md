@@ -25,11 +25,11 @@ This is workspace **session restoration**, not a replacement for Pi's session pi
 | --- | --- |
 | Tabs still open when you quit | Pi sessions still open when WezTerm closes |
 | Open tabs come back on next launch | `pi-reopen` restores the kept records as new tabs |
-| Tabs you closed yourself stay out of the restore list | A tab closed with `ctrl+w` is forgotten with `PI_REOPEN_FORGET_ON_TAB_CLOSE=1` (or always, when you `/quit` inside Pi) |
+| Tabs you closed yourself stay out of the restore list | A tab closed with `ctrl+w` is forgotten by default (or always, when you `/quit` inside Pi) |
 | “Recently closed” via Ctrl+Shift+T | `/reopen recent` — the last 24h, even without a record |
 | Crash → “Restore pages?” | Crash / closing the whole WezTerm / WSL shutdown → all records kept, `pi-reopen` brings them back |
 
-The rule to remember: **open = keep, closed = released**. No markers or extra commands — a tab you leave open is your “I want this back” signal, and closing one says “I'm done with it”. (Default: closing a tab still keeps the record so nothing is ever lost; set `PI_REOPEN_FORGET_ON_TAB_CLOSE=1` for the browser behavior.)
+The rule to remember: **open = keep, closed = released**. No markers or extra commands — a tab you leave open is your “I want this back” signal, and closing one says “I'm done with it”. (Default: closing a tab drops it from the restore list, browser-style; set `PI_REOPEN_FORGET_ON_TAB_CLOSE=0` to always keep records.)
 
 ## Use case and platform support
 
@@ -200,7 +200,7 @@ pi install git:github.com/AuthurX/pi-reopen
 | `PI_REOPEN_LANG` | Force output language: `zh` or `en` (defaults from `LC_ALL`/`LANG`) |
 | `PI_REOPEN_TERMINAL` | Terminal adapter id; only `wezterm` is implemented (see [docs/TERMINALS.md](docs/TERMINALS.md)) |
 | `PI_REOPEN_MAX_AGE_DAYS` | Days after which dead records stop being restored (default 14, `0` disables) |
-| `PI_REOPEN_FORGET_ON_TAB_CLOSE` | Set `1`/`true` to treat closing a single tab (WezTerm still has other tabs) as “task done” and delete its record; closing the whole terminal or an inconclusive check still keeps the record (default off) |
+| `PI_REOPEN_FORGET_ON_TAB_CLOSE` | Closing a single tab (WezTerm still has other tabs) is treated as “task done” and its record is deleted (default on); closing the whole terminal or an inconclusive check keeps the record. Set `0`/`false` to always keep records |
 
 Legacy names (`PI_WORKSPACE_*`) are still honored; the canonical `PI_REOPEN_*` name wins when both are set.
 
@@ -219,7 +219,7 @@ On Linux/macOS/WSL, Pi is located from PATH and the Bash login environment. Nati
 ![How it works](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/how-it-works.png)
 
 - **Registration**: on every Pi startup, `{session file absolute path, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` is written in real time to `~/.pi/agent/pi-reopen/members/` (one file per session, atomic replacement). Records written by 0.3.0 and earlier under `pi-workspace/` are still read and cleaned.
-- **Close detection**: Pi's signal exits also emit a `quit` cleanup event, so the event name alone is not reliable. The extension records SIGHUP/SIGTERM within the TUI lifecycle; a signal-less deliberate `/quit` or session switch deletes the record; reload keeps the record and cleans up listeners. Without a tracked signal it also asks WezTerm whether the current pane still exists (`WEZTERM_PANE`): a vanished pane means the window was closed, so the record is kept. With `PI_REOPEN_FORGET_ON_TAB_CLOSE=1` a vanished pane is deleted instead when WezTerm still has other panes (closing one tab = task done, browser-style “closed tabs don't join the restore set”); no other panes or an inconclusive check keeps the record. When a hard kill prevents cleanup, the leftover is recorded. On power loss, at most the persisted records are recovered; the latest unflushed changes are not guaranteed.
+- **Close detection**: Pi's signal exits also emit a `quit` cleanup event, so the event name alone is not reliable. The extension records SIGHUP/SIGTERM within the TUI lifecycle; a signal-less deliberate `/quit` or session switch deletes the record; reload keeps the record and cleans up listeners. Without a tracked signal it also asks WezTerm whether the current pane still exists (`WEZTERM_PANE`): a vanished pane means the window was closed, so the record is kept. By default (opt out with `PI_REOPEN_FORGET_ON_TAB_CLOSE=0`) a vanished pane is deleted instead when WezTerm still has other panes (closing one tab = task done, browser-style “closed tabs don't join the restore set”); no other panes or an inconclusive check keeps the record. When a hard kill prevents cleanup, the leftover is recorded. On power loss, at most the persisted records are recovered; the latest unflushed changes are not guaranteed.
 - **Safe startup**: tabs open concurrently (5 at a time by default); each `wezterm cli spawn` request is aborted with an error after 15s of no response, and 3 consecutive request failures stop early, avoiding long waits when WezTerm is stuck. `--limit` bounds the burst.
 - **Deduplication**: before restore, process liveness is checked (pid + start time + bootId; stale PIDs after a reboot are not misjudged), running processes are scanned for `--session <file>` so an unregistered window is not opened twice, and start claims (60s TTL + holder liveness check) reduce duplicate requests. The global restore lock (`restore.lock`, 30-minute TTL + pid liveness + bootId check) is created with `O_EXCL`, so concurrent restores cannot both start a batch; it can be taken over after the lock holder dies or the OS reboots.
 - **Verification**: "request accepted" and "pi registered" are reported separately; the confirmation window scales with the batch size (15s + 2s per session, capped at 90s).
