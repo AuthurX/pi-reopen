@@ -779,7 +779,7 @@ test('cli list reads the isolated agent dir', async (t) => {
   t.after(() => { if (old === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = old; });
   writeMember(liveEntry(f.paths, 'cli-list', { pid: undefined, processStart: undefined, bootId: undefined }), f.paths);
   let out = '';
-  const code = await cliRun(['list'], { stdout: { write: (l) => (out += l) }, env: f.env });
+  const code = await cliRun(['list'], { stdout: { write: (l) => (out += l), columns: 120 }, env: f.env });
   assert.equal(code, 0);
   assert.match(out, /cli-list/);
   assert.match(out, /待恢复/);
@@ -798,12 +798,15 @@ test('cli list aligns CJK columns and truncates long paths to terminal width', a
   const code = await cliRun(['list'], { stdout, env: f.env });
   assert.equal(code, 0);
   const lines = out.trim().split('\n');
+  assert.match(lines[0], /^#/, '表头首列为序号');
   assert.match(lines[0], /状态/);
   assert.match(lines[0], /会话/);
   assert.match(lines[0], /路径/);
   assert.match(lines[0], /时间/);
   const data = lines.slice(1);
   assert.equal(data.length, 2);
+  assert.equal(data[0].slice(0, 1), '1', '行首为序号 1');
+  assert.equal(data[1].slice(0, 1), '2', '行首为序号 2');
   const sepPos = (line) => displayWidth(line.slice(0, line.indexOf(' | ')));
   assert.equal(sepPos(data[0]), sepPos(data[1]), '状态列（待恢复/会话文件缺失等）按显示宽度对齐');
   for (const l of lines) assert.ok(displayWidth(l) <= 100, `每行不超过终端宽度：${l}`);

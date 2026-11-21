@@ -122,6 +122,7 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 		zh: "没有登记成员。关闭 WezTerm 时仍打开的 Pi 会在下次启动后自动登记。",
 		en: "No registered members. Pis still open when WezTerm closes are recorded on their next start.",
 	},
+	"cli.listIndex": { zh: "#", en: "#" },
 	"cli.listState": { zh: "状态", en: "STATE" },
 	"cli.listSession": { zh: "会话", en: "SESSION" },
 	"cli.listPath": { zh: "路径", en: "PATH" },

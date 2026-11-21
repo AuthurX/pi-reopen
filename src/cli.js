@@ -120,26 +120,28 @@ const SEP = " | ";
 /** 对齐表格：状态/会话/路径/时间；超宽时截断会话名/路径；终端过窄放不下表格时退回未对齐的简单行。 */
 function listLines({ plan }, { termWidth = 80, lang = resolveLang() } = {}) {
 	if (!plan.items.length) return [t(lang, "cli.listEmpty")];
-	const rows = plan.items.map((item) => [
+	const rows = plan.items.map((item, i) => [
+		String(i + 1),
 		label(item.state, lang),
 		item.entry.name || item.entry.sessionId,
 		item.entry.cwd ?? "",
 		new Date(item.entry.ts).toLocaleString(),
 	]);
-	const stateW = Math.max(8, ...rows.map((r) => displayWidth(r[0])));
-	const whenW = Math.max(4, ...rows.map((r) => displayWidth(r[3])));
-	let titleW = Math.max(1, ...rows.map((r) => displayWidth(r[1])));
-	let cwdW = Math.max(1, ...rows.map((r) => displayWidth(r[2])));
-	const avail = termWidth - stateW - whenW - SEP.length * 3;
+	const idxW = Math.max(1, String(rows.length).length);
+	const stateW = Math.max(8, ...rows.map((r) => displayWidth(r[1])));
+	const whenW = Math.max(4, ...rows.map((r) => displayWidth(r[4])));
+	let titleW = Math.max(1, ...rows.map((r) => displayWidth(r[2])));
+	let cwdW = Math.max(1, ...rows.map((r) => displayWidth(r[3])));
+	const avail = termWidth - idxW - stateW - whenW - SEP.length * 4;
 	if (Number.isFinite(avail) && avail < 8) return rows.map((r) => r.join(SEP));
 	if (Number.isFinite(avail) && titleW + cwdW > avail) {
 		const total = titleW + cwdW;
 		titleW = Math.min(Math.max(4, Math.floor((avail * titleW) / total)), avail - 4);
 		cwdW = avail - titleW;
 	}
-	const widths = [stateW, titleW, cwdW, whenW];
+	const widths = [idxW, stateW, titleW, cwdW, whenW];
 	const render = (cells) => cells.map((c, i) => padTo(truncateTo(c, widths[i]), widths[i])).join(SEP);
-	return [render([t(lang, "cli.listState"), t(lang, "cli.listSession"), t(lang, "cli.listPath"), t(lang, "cli.listTime")]), ...rows.map(render)];
+	return [render([t(lang, "cli.listIndex"), t(lang, "cli.listState"), t(lang, "cli.listSession"), t(lang, "cli.listPath"), t(lang, "cli.listTime")]), ...rows.map(render)];
 }
 
 export async function run(argv = [], { stdout = process.stdout, env = process.env } = {}) {
