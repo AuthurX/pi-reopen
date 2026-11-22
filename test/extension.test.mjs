@@ -23,14 +23,14 @@ async function loadExtension(t, { hooks = 'test-hooks.mjs' } = {}) {
       }
     }
     fs.rmSync(home, { recursive: true, force: true });
-    for (const key of ['PI_CODING_AGENT_DIR', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM',
+    for (const key of ['PI_CODING_AGENT_DIR', 'PI_REOPEN_WEZTERM', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_WORKSPACE_WEZTERM',
       'WEZTERM_PANE', 'PI_WORKSPACE_PANE_ALIVE', 'PI_WORKSPACE_OTHER_PANES',
       'PI_WORKSPACE_FORGET_ON_TAB_CLOSE']) delete process.env[key];
   });
   process.env.PI_CODING_AGENT_DIR = join(home, '.pi', 'agent');
   process.env.PI_WORKSPACE_LANG = 'zh';
   process.env.PI_WORKSPACE_SRC = join(project, 'src');
-  process.env.PI_WORKSPACE_WEZTERM = join(home, 'wez.exe');
+  process.env.PI_REOPEN_WEZTERM = join(home, 'wez.exe');
   fs.writeFileSync(join(home, 'wez.exe'), 'MZ');
   process.env.PI_WORKSPACE_HOOKS = join(project, 'test', 'fixtures', hooks);
 
@@ -97,6 +97,8 @@ test('extension writes a self-record so doctor can detect it', async (t) => {
   assert.equal(record.schemaVersion, 2);
   assert.ok(record.ts > 0);
   assert.equal(record.pid, process.pid);
+  assert.ok(record.processStart, '自述需包含进程启动身份，不能仅靠文件存在判断运行状态');
+  assert.ok(record.bootId);
 });
 
 test('extension registers command/shortcut; only tui mode records members', async (t) => {

@@ -54,8 +54,10 @@ The rule to remember: **open = keep, closed = released**. No markers or extra co
 ```bash
 pi install npm:@ellieyujin/pi-reopen@latest
 npm install -g @ellieyujin/pi-reopen@latest --omit=peer
-pi-reopen doctor
+pi-reopen setup
 ```
+
+`setup` consolidates checks for the extension source, whether its recorded process is still alive, the global CLI and PATH, version alignment, and duplicate legacy entries. It prints platform-specific next commands but never runs `sudo`, `setx`, or changes system configuration.
 
 Run `/reload` in each existing Pi so it starts recording. After closing and reopening WezTerm:
 
@@ -112,15 +114,28 @@ Equivalent entry points inside Pi:
 | `pi-reopen` (i.e. `pi-reopen restore`) | Reopen the Pis still open at last close; running ones are skipped |
 | `pi-reopen restore --dry-run` | Show the plan only, do not open tabs |
 | `pi-reopen restore --no-wait` | Skip waiting for each pi's start confirmation |
-| `pi-reopen restore --only <pattern>` | Restore only matching sessions (substring or `*` glob; name, path or id) |
+| `pi-reopen restore --only <pattern>` | Restore only matching sessions (substring, `*` glob or current-list index; name, path or id) |
+| `pi-reopen restore --interactive` | Show the current list and enter indexes to select sessions |
 | `pi-reopen restore --limit <N>` | Open at most N tabs this run; the rest are deferred to next time |
 | `pi-reopen restore --json` | Machine-readable output |
 | `pi-reopen list [--wide\|--json]` | List registered members and status; long content is truncated to terminal width by default |
-| `pi-reopen forget <id\|prefix> ...` | Drop specific records (conversation files untouched) |
+| `pi-reopen show <index\|id\|prefix> ...` | Show state, paths, session file and registration details |
+| `pi-reopen forget <index\|id\|prefix> ...` | Drop specific records (conversation files untouched) |
 | `pi-reopen prune [--dry-run]` | Drop expired/unrecoverable records (keeps the last 14 days) |
-| `pi-reopen doctor` | Environment and registry check (platform / WezTerm / pi / identity / extension / version match) |
+| `pi-reopen setup` | Guided first-run checks; prints commands without changing the system |
+| `pi-reopen doctor` | Environment and registry check (extension process identity, version match and WSL single-tab close detection) |
 | `pi-reopen clear` | Clear the registry and start claims (does not delete conversation files or legacy-format records) |
 | `pi-reopen --help` / `--version` | Usage / version |
+
+The `#` column is an **index in the current list snapshot, not a stable ID**. Each command resolves it against the latest list in the same order; after additions, removals or timestamp reordering, run `pi-reopen list` again. Pure numeric input is treated as an index first; session IDs and unique prefixes remain supported.
+
+```bash
+pi-reopen list
+pi-reopen restore --only 1,3 --dry-run
+pi-reopen show 2
+pi-reopen forget 2
+pi-reopen restore --interactive
+```
 
 `list` statuses: running (运行中) / start claimed (启动占用中) / pending restore (待恢复) / expired (已过期) / open in another window (已在其他窗口打开) / working directory missing (工作目录缺失) / session file missing (会话文件缺失) / not matched by `--only` / deferred by `--limit` / other platform or distro (其他平台/发行版) / duplicate entry (重复条目).
 
@@ -135,14 +150,14 @@ Use `@ellieyujin/pi-reopen` with the stable `latest` dist-tag. The unscoped `pi-
 ```bash
 pi install npm:@ellieyujin/pi-reopen@latest
 npm install -g @ellieyujin/pi-reopen@latest --omit=peer
-pi-reopen doctor
+pi-reopen setup
 ```
 
 - `pi install` registers and loads the extension, but does not guarantee the CLI is on a regular shell's PATH; `npm install -g` installs the external CLI (the npm global bin directory must also be on PATH)
-- The CLI does not depend on Pi's peer packages, hence `--omit=peer` to avoid installing the host as well; the two installs must be updated separately and kept at the same version (`pi-reopen doctor` reports drift)
+- The CLI does not depend on Pi's peer packages, hence `--omit=peer` to avoid installing the host as well; the two installs must be updated separately and kept at the same version (`pi-reopen setup` / `doctor` reports drift)
 - `pi install` declares only a minimum peer version (`>=1.5.0`), with no upper bound: any newer Pi can be installed directly
 
-**Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load a stale local extension entry (for example an old `open-all.ts` symlink or a separate `pi-reopen` copy) at the same time as the package; before migrating, check `pi list` and the personal extension directory, disable the old entry only, and do not delete session or auth files.
+**Registration requires the extension**: installing only the CLI cannot record sessions. After install, run `/reload` or restart in each already-open Pi; a fresh install cannot precisely recover previously unregistered windows. Do not load a stale local extension entry (for example an old `open-all.ts` symlink or a separate `pi-reopen` copy) at the same time as the package. `pi-reopen setup` checks package sources and likely duplicate entries in the personal extension directory; verify them with `pi list`, disable only old entries, and do not delete session or auth files. `doctor`/`setup` verifies the self-record using PID, process start time and boot ID; an old `extension.json` alone no longer means the extension is currently running.
 
 ### Migrating from the unpublished package
 
@@ -168,7 +183,7 @@ pi install .
 mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/bin/pi-reopen.js" "$HOME/.local/bin/pi-reopen"
 export PATH="$HOME/.local/bin:$PATH"
-pi-reopen doctor
+pi-reopen setup
 ```
 
 Save the PATH configuration in your shell startup file for future use. If the CLI symlink already exists, check its target first; do not blindly overwrite it.

@@ -461,7 +461,7 @@ test('registry health detects a missing extension record and version drift', asy
   assert.equal(empty.dirExists, false);
   let checks = healthChecks(empty, 'en');
   assert.equal(checks.find((c) => c.name === 'Registry directory').ok, false);
-  assert.equal(checks.find((c) => c.name === 'Extension loaded').ok, false);
+  assert.equal(checks.find((c) => c.name === 'Extension running').ok, false);
 
   writeMember({ ...liveEntry(f.paths, 'health-entry'), pid: undefined }, f.paths);
   writeExtensionRecord({ version: '0.0.1', ts: Date.now() }, f.paths);
@@ -479,6 +479,36 @@ test('registry health detects a missing extension record and version drift', asy
   const future = healthChecks(registryHealth({ paths: f.paths, env: { ...f.env } }), 'en');
   assert.equal(future.find((c) => c.name === 'Record schema').ok, false, '扩展写出更新的记录结构必须告警');
 
+});
+
+test('extension health distinguishes a historical record from a live recorded process', async (t) => {
+  const { healthChecks, registryHealth, writeExtensionRecord } = await import('../src/health.js');
+  const f = fixture(t);
+  writeExtensionRecord({ version: '1.0.0', pid: 123, processStart: 'start-a', bootId: 'boot-a', ts: Date.now() }, f.paths);
+  const stale = registryHealth({ paths: f.paths, env: f.env, bootId: 'boot-a', processStart: () => 'start-b' });
+  assert.equal(stale.extensionRunning, false, 'PID 被复用时进程启动身份不同，不得判定为仍在运行');
+  const staleCheck = healthChecks(stale, 'en').find((c) => c.name === 'Extension running');
+  assert.equal(staleCheck.ok, false);
+  assert.match(staleCheck.detail, /historical record only/);
+  const live = registryHealth({ paths: f.paths, env: f.env, bootId: 'boot-a', processStart: () => 'start-a' });
+  assert.equal(live.extensionRunning, true);
+  assert.equal(healthChecks(live, 'en').find((c) => c.name === 'Extension running').ok, true);
+});
+
+test('WSL single-tab close detection is explicit and remains a non-blocking warning', async () => {
+  const { singleTabCloseCheck } = await import('../src/health.js');
+  const missing = singleTabCloseCheck({ env: {}, platform: 'wsl', lang: 'en' });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.warning, true);
+  assert.match(missing.detail, /always keeps its record/);
+  assert.match(missing.hint, /WSLENV/);
+  assert.match(missing.hint, /setx/);
+  const available = singleTabCloseCheck({ env: { WEZTERM_PANE: '42' }, platform: 'wsl', lang: 'en' });
+  assert.equal(available.ok, true);
+  assert.match(available.detail, /42/);
+  const disabled = singleTabCloseCheck({ env: { WEZTERM_PANE: '42', PI_REOPEN_FORGET_ON_TAB_CLOSE: '0' }, platform: 'wsl', lang: 'en' });
+  assert.match(disabled.detail, /disabled/);
+  assert.equal(singleTabCloseCheck({ env: {}, platform: 'linux', lang: 'en' }), undefined);
 });
 
 test('records with a newer schema are skipped and reported by list', async (t) => {
@@ -582,7 +612,7 @@ test('doctor reports registry health and explains an empty restore', async (t) =
   const code = await cliRun(['doctor'], { stdout, env });
   assert.equal(code, 2, '扩展未加载时 doctor 必须失败，而不是显示“环境就绪”');
   assert.match(out.join('\n'), /登记目录/);
-  assert.match(out.join('\n'), /扩展加载/);
+  assert.match(out.join('\n'), /扩展运行状态/);
   out.length = 0;
   assert.equal(await cliRun(['restore', '--dry-run'], { stdout, env }), 0);
   assert.match(out.join('\n'), /待恢复 0 个/);
@@ -803,7 +833,7 @@ test('cli list aligns CJK columns and truncates long paths to terminal width', a
   assert.match(lines[0], /会话/);
   assert.match(lines[0], /路径/);
   assert.match(lines[0], /时间/);
-  const data = lines.slice(1);
+  const data = lines.slice(1, 3);
   assert.equal(data.length, 2);
   assert.equal(data[0].slice(0, 1), '1', '行首为序号 1');
   assert.equal(data[1].slice(0, 1), '2', '行首为序号 2');
@@ -821,12 +851,12 @@ test('cli list aligns CJK columns and truncates long paths to terminal width', a
   out = '';
   await cliRun(['list'], { stdout: { write: (l) => (out += l), columns: 40 }, env: f.env });
   const narrow = out.trim().split('\n');
-  assert.equal(narrow.length, 2, '窄终端：每个成员一行，无表头');
-  for (const l of narrow) assert.match(l, / \| /);
+  assert.equal(narrow.length, 3, '窄终端：每个成员一行，无表头，末尾为快照提示');
+  for (const l of narrow.slice(0, 2)) assert.match(l, / \| /);
   // 无 stdout.columns 时回退到 COLUMNS 环境变量
   out = '';
   await cliRun(['list'], { stdout: { write: (l) => (out += l) }, env: { ...f.env, COLUMNS: '40' } });
-  assert.equal(out.trim().split('\n').length, 2, 'COLUMNS 环境变量同样触发窄终端回退');
+  assert.equal(out.trim().split('\n').length, 3, 'COLUMNS 环境变量同样触发窄终端回退');
 });
 
 test('cli clear empties the isolated workspace and keeps session files', async (t) => {

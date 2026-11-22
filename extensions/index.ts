@@ -60,22 +60,6 @@ export default async function (pi: ExtensionAPI) {
 	const fs = await import("node:fs");
 	const paths = workspacePaths();
 
-	// 供 doctor 判断“扩展是否真的加载了”，以及 CLI/扩展版本是否一致。
-	try {
-		health.writeExtensionRecord({
-			version: version.packageVersion(),
-			schemaVersion: members.MEMBER_SCHEMA,
-			platform: platform.runtimePlatform(process.env),
-			distro: process.env.WSL_DISTRO_NAME,
-			user: userInfo().username,
-			pid: process.pid,
-			ts: Date.now(),
-			node: process.version,
-		}, paths);
-	} catch {
-		/* 诊断信息写失败不应影响登记 */
-	}
-
 	let currentSessionId: string | undefined;
 	let signalExit = false;
 	// 进程身份只取一次：Windows 上 processStart 是一次 PowerShell 启动，
@@ -100,6 +84,24 @@ export default async function (pi: ExtensionAPI) {
 		}
 		return cachedIdentity;
 	}
+
+	// 自述必须带进程身份，doctor 才能区分历史文件与当前仍在运行的扩展。
+	try {
+		health.writeExtensionRecord({
+			version: version.packageVersion(),
+			schemaVersion: members.MEMBER_SCHEMA,
+			platform: platform.runtimePlatform(process.env),
+			distro: process.env.WSL_DISTRO_NAME,
+			user: userInfo().username,
+			pid: process.pid,
+			...identity(),
+			ts: Date.now(),
+			node: process.version,
+		}, paths);
+	} catch {
+		/* 诊断信息写失败不应影响登记 */
+	}
+
 	const signals = ["SIGHUP", "SIGTERM"] as const;
 	const markSignalExit = () => { signalExit = true; };
 	function detachSignals(): void {

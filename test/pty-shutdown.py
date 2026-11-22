@@ -30,7 +30,8 @@ def check(action):
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(tmp)
-            env = dict(os.environ, HOME=tmp, PI_CODING_AGENT_DIR=str(agent), TERM='xterm-256color')
+            env = dict(os.environ, HOME=tmp, PI_CODING_AGENT_DIR=str(agent), TERM='xterm-256color',
+                       PI_REOPEN_FORGET_ON_TAB_CLOSE='0')
             for key in ['PI_REOPEN_HOOKS', 'PI_REOPEN_SRC', 'PI_WORKSPACE_HOOKS', 'PI_WORKSPACE_SRC', 'PI_CODING_AGENT_SESSION_DIR']:
                 env.pop(key, None)
             os.execve(pi, [pi, '--offline', '--no-extensions', '--no-mcp', '--no-skills',

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { binfmtStatus, persistHint } from "./binfmt.js";
-import { healthChecks, registryHealth } from "./health.js";
+import { healthChecks, registryHealth, singleTabCloseCheck } from "./health.js";
 import { resolveLang, t } from "./i18n.js";
 import { workspacePaths } from "./paths.js";
 import { currentBootId, isLive } from "./liveness.js";
@@ -11,6 +11,8 @@ import { exitCodeFor, inspect, label, runRestore, summarize } from "./restore.js
 import { preflight } from "./preflight.js";
 import { runtimePlatform } from "./platform.js";
 import { packageVersion } from "./version.js";
+import { installationChecks, setupSteps } from "./setup.js";
+import { resolveListIndexes, resolveOnlySelectors } from "./selection.js";
 
 /** 单字符显示宽度：CJK/全角记 2，其余记 1（东亚宽度简化表）。 */
 function charWidth(cp) {
@@ -35,7 +37,7 @@ export function normalizeArgv(argv = []) {
 	return { command: first, flags: rest };
 }
 
-/** 收集 --only 模式（支持 --only a,b 与 --only=a）。 */
+/** 收集 --only 选择器：名称/路径/id 模式或当前列表序号（支持逗号与 --only=a）。 */
 export function collectOnly(flags = []) {
 	const patterns = [];
 	for (let i = 0; i < flags.length; i++) {
@@ -144,7 +146,38 @@ function listLines({ plan }, { termWidth = 80, lang = resolveLang() } = {}) {
 	return [render([t(lang, "cli.listIndex"), t(lang, "cli.listState"), t(lang, "cli.listSession"), t(lang, "cli.listPath"), t(lang, "cli.listTime")]), ...rows.map(render)];
 }
 
-export async function run(argv = [], { stdout = process.stdout, env = process.env } = {}) {
+function printChecks(write, checks, lang) {
+	for (const check of checks) {
+		const mark = check.warning ? "⚠" : check.ok ? "✔" : "✖";
+		write(t(lang, "cli.doctorCheck", { mark, name: check.name, detail: check.detail }));
+		if (check.hint) write(t(lang, "restore.hint", { hint: check.hint }));
+	}
+}
+
+function detailLines(item, index, lang) {
+	const entry = item.entry;
+	return [
+		t(lang, "cli.detailHeading", { index, title: entry.name || entry.sessionId }),
+		t(lang, "cli.detailState", { state: label(item.state, lang) }),
+		t(lang, "cli.detailId", { id: entry.sessionId }),
+		t(lang, "cli.detailCwd", { cwd: entry.cwd ?? "-" }),
+		t(lang, "cli.detailFile", { file: item.sessionFile ?? entry.sessionFile ?? "-" }),
+		t(lang, "cli.detailTime", { time: new Date(entry.ts).toLocaleString() }),
+		t(lang, "cli.detailPid", { pid: entry.pid ?? "-" }),
+	];
+}
+
+async function ask(question, stdin, stdout) {
+	const { createInterface } = await import("node:readline/promises");
+	const rl = createInterface({ input: stdin, output: stdout });
+	try {
+		return await rl.question(question);
+	} finally {
+		rl.close();
+	}
+}
+
+export async function run(argv = [], { stdout = process.stdout, stdin = process.stdin, env = process.env, prompt } = {}) {
 	const { command, flags } = normalizeArgv(argv);
 	const lang = resolveLang(env);
 	const hasFlag = (name) => flags.includes(name);
@@ -173,18 +206,55 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 		case "restore": {
 			const limitRaw = Number(flagValue(flags, "--limit"));
 			const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : undefined;
+			const paths = workspacePaths(env);
+			const interactive = hasFlag("--interactive");
+			const selectors = collectOnly(flags);
+			if (interactive && (selectors.length || hasFlag("--json"))) {
+				write(t(lang, "cli.interactiveUsage"));
+				return 1;
+			}
+			let only = selectors;
+			let onlyIds = [];
+			if (interactive) {
+				const inspected = inspect({ paths, env });
+				for (const line of listLines(inspected, { termWidth: Number(stdout?.columns) || 80, lang })) write(line);
+				if (!inspected.plan.items.length) return 0;
+				const answer = await (prompt ?? ((question) => ask(question, stdin, stdout)))(t(lang, "cli.restorePrompt"));
+				if (!answer?.trim()) {
+					write(t(lang, "cli.restoreCancelled"));
+					return 0;
+				}
+				const selected = resolveListIndexes(answer.trim().split(/[\s,，]+/), inspected.plan.items);
+				if (selected.invalid.length) {
+					write(t(lang, "cli.invalidIndex", { list: selected.invalid.join(", "), n: inspected.plan.items.length }));
+					return 1;
+				}
+				only = [];
+				onlyIds = selected.ids;
+			} else if (selectors.some((selector) => /^\d+$/.test(selector))) {
+				const inspected = inspect({ paths, env });
+				const selected = resolveOnlySelectors(selectors, inspected.plan.items);
+				if (selected.invalid.length) {
+					write(t(lang, "cli.invalidIndex", { list: selected.invalid.join(", "), n: inspected.plan.items.length }));
+					return 1;
+				}
+				only = selected.only;
+				onlyIds = selected.onlyIds;
+			}
 			const result = await runRestore({
 				env,
+				paths,
 				dryRun: hasFlag("--dry-run"),
 				noWait: hasFlag("--no-wait"),
-				only: collectOnly(flags),
+				only,
+				onlyIds,
 				limit,
 			});
 			const code = exitCodeFor(result);
 			if (hasFlag("--json")) {
 				write(JSON.stringify(jsonPayload(result, code), null, 2));
 			} else {
-				for (const line of summarize(result)) write(line);
+				for (const line of summarize(result, lang)) write(line);
 			}
 			return code;
 		}
@@ -211,23 +281,68 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 				lang,
 			});
 			for (const line of lines) write(line);
+			if (inspected.plan.items.length) {
+				const snapshot = t(lang, "cli.listSnapshot");
+				write(wide ? snapshot : truncateTo(snapshot, columns));
+			}
 			if (inspected.unsupported) write(t(lang, "cli.listUnsupported", { n: inspected.unsupported }));
 			return 0;
 		}
-		case "doctor": {
-			const pre = preflight({ env, lang });
-			const health = registryHealth({ paths: workspacePaths(env), env });
-			const checks = [...pre.checks, ...healthChecks(health, lang)];
-			for (const check of checks) {
-				write(t(lang, "cli.doctorCheck", { mark: check.ok ? "✔" : "✖", name: check.name, detail: check.detail }));
-				if (check.hint) write(t(lang, "restore.hint", { hint: check.hint }));
+		case "show": {
+			const targets = flags.filter((flag) => !flag.startsWith("-"));
+			if (!targets.length) {
+				write(t(lang, "cli.showUsage"));
+				return 1;
 			}
-			const binfmt = runtimePlatform(env) === "wsl" ? binfmtStatus() : {};
+			const inspected = inspect({ paths: workspacePaths(env), env });
+			const { ids, missing, ambiguous, invalid } = resolveMemberIds(targets, workspacePaths(env), inspected.members);
+			for (const item of ambiguous) {
+				write(t(lang, "cli.forgetAmbiguous", { input: item.input, candidates: item.candidates.join(", ") }));
+			}
+			if (invalid.length) write(t(lang, "cli.invalidIndex", { list: invalid.join(", "), n: inspected.members.length }));
+			if (missing.length) write(t(lang, "cli.showMissing", { list: missing.join(", ") }));
+			for (const id of ids) {
+				const index = inspected.plan.items.findIndex((item) => item.entry.sessionId === id);
+				if (index >= 0) for (const line of detailLines(inspected.plan.items[index], index + 1, lang)) write(line);
+			}
+			return ambiguous.length || invalid.length || missing.length ? 1 : 0;
+		}
+		case "setup": {
+			const platform = runtimePlatform(env);
+			const paths = workspacePaths(env);
+			const pre = preflight({ env, lang, platform });
+			const health = registryHealth({ paths, env });
+			const result = installationChecks({ env, paths, health, platform, lang });
+			const tabClose = singleTabCloseCheck({ env, platform, lang });
+			const checks = [...pre.checks, ...healthChecks(health, lang), ...result.checks, ...(tabClose ? [tabClose] : [])];
+			write(t(lang, "setup.header", { version: result.cliVersion }));
+			printChecks(write, checks, lang);
+			const binfmt = platform === "wsl" ? binfmtStatus() : {};
 			if (binfmt.registered && !binfmt.persistent) {
 				write(t(lang, "cli.binfmtWarning"));
 				for (const line of persistHint(lang).split("\n")) write(`  ${line}`);
 			}
-			const ok = checks.every((check) => check.ok);
+			write(t(lang, "setup.nextHeader"));
+			for (const [index, step] of setupSteps({ env, health, result, platform, lang }).entries()) {
+				write(t(lang, "setup.nextStep", { n: index + 1, step }));
+			}
+			const ok = checks.filter((check) => !check.warning).every((check) => check.ok);
+			write(ok ? t(lang, "setup.ready") : t(lang, "cli.doctorBlocked"));
+			return ok ? 0 : 2;
+		}
+		case "doctor": {
+			const platform = runtimePlatform(env);
+			const pre = preflight({ env, lang, platform });
+			const health = registryHealth({ paths: workspacePaths(env), env });
+			const tabClose = singleTabCloseCheck({ env, platform, lang });
+			const checks = [...pre.checks, ...healthChecks(health, lang), ...(tabClose ? [tabClose] : [])];
+			printChecks(write, checks, lang);
+			const binfmt = platform === "wsl" ? binfmtStatus() : {};
+			if (binfmt.registered && !binfmt.persistent) {
+				write(t(lang, "cli.binfmtWarning"));
+				for (const line of persistHint(lang).split("\n")) write(`  ${line}`);
+			}
+			const ok = checks.filter((check) => !check.warning).every((check) => check.ok);
 			write(ok ? t(lang, "cli.doctorReady") : t(lang, "cli.doctorBlocked"));
 			return ok ? 0 : 2;
 		}
@@ -238,11 +353,12 @@ export async function run(argv = [], { stdout = process.stdout, env = process.en
 				return 1;
 			}
 			const paths = workspacePaths(env);
-			const { ids, missing, ambiguous } = resolveMemberIds(targets, paths);
+			const { ids, missing, ambiguous, invalid, count } = resolveMemberIds(targets, paths);
 			for (const item of ambiguous) {
 				write(t(lang, "cli.forgetAmbiguous", { input: item.input, candidates: item.candidates.join(", ") }));
 			}
-			if (ambiguous.length) return 1;
+			if (invalid.length) write(t(lang, "cli.invalidIndex", { list: invalid.join(", "), n: count }));
+			if (ambiguous.length || invalid.length) return 1;
 			const removed = forgetMembers(ids, paths);
 			write(t(lang, "cli.forgetRemoved", {
 				n: removed,

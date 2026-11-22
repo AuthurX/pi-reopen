@@ -1,7 +1,10 @@
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveLang, t } from "./i18n.js";
+import { currentBootId, isLive } from "./liveness.js";
 import { MEMBER_SCHEMA, listMembers } from "./members.js";
+import { currentPaneId } from "./pane.js";
+import { runtimePlatform } from "./platform.js";
 import { workspacePaths } from "./paths.js";
 import { packageVersion } from "./version.js";
 
@@ -25,7 +28,7 @@ export function readExtensionRecord(paths = workspacePaths()) {
 }
 
 /** 登记目录健康度：目录是否存在/可写、成员数量、最近登记时间、扩展自述与 CLI 版本。 */
-export function registryHealth({ paths = workspacePaths(), env = process.env } = {}) {
+export function registryHealth({ paths = workspacePaths(), env = process.env, bootId, processStart } = {}) {
 	const dirExists = existsSync(paths.workspace);
 	let writable = false;
 	if (dirExists) {
@@ -38,13 +41,15 @@ export function registryHealth({ paths = workspacePaths(), env = process.env } =
 	}
 	const members = listMembers(paths);
 	const lastRegisteredAt = members.reduce((max, member) => Math.max(max, member.ts ?? 0), 0) || undefined;
+	const extension = readExtensionRecord(paths);
 	return {
 		workspace: paths.workspace,
 		dirExists,
 		writable,
 		memberCount: members.length,
 		lastRegisteredAt,
-		extension: readExtensionRecord(paths),
+		extension,
+		extensionRunning: isLive(extension, { bootId: bootId ?? currentBootId(), processStart }),
 		cliVersion: packageVersion(),
 		env,
 	};
@@ -67,10 +72,12 @@ export function healthChecks(health, lang = resolveLang(health.env)) {
 	const ext = health.extension;
 	add(
 		t(lang, "health.extension"),
-		!!ext,
-		ext
+		!!health.extensionRunning,
+		health.extensionRunning
 			? t(lang, "health.extensionDetail", { version: ext.version ?? "?", ts: ext.ts ? new Date(ext.ts).toLocaleString() : "?" })
-			: t(lang, "health.extensionMissing"),
+			: ext
+				? t(lang, "health.extensionStale", { version: ext.version ?? "?", ts: ext.ts ? new Date(ext.ts).toLocaleString() : "?" })
+				: t(lang, "health.extensionMissing"),
 		t(lang, "health.extensionHint"),
 	);
 
@@ -99,4 +106,20 @@ export function healthChecks(health, lang = resolveLang(health.env)) {
 	);
 
 	return checks;
+}
+
+export function singleTabCloseCheck({ env = process.env, platform = runtimePlatform(env), lang = resolveLang(env) } = {}) {
+	if (platform !== "wsl") return undefined;
+	const raw = String(env.PI_REOPEN_FORGET_ON_TAB_CLOSE ?? env.PI_WORKSPACE_FORGET_ON_TAB_CLOSE ?? "").trim().toLowerCase();
+	const enabled = !["0", "false", "off", "no"].includes(raw);
+	const available = enabled && currentPaneId(env) !== undefined;
+	return {
+		name: t(lang, "health.singleTab"),
+		ok: available,
+		warning: !available,
+		detail: !enabled
+			? t(lang, "health.singleTabDisabled")
+			: available ? t(lang, "health.singleTabAvailable", { pane: env.WEZTERM_PANE }) : t(lang, "health.singleTabUnavailable"),
+		hint: enabled && !available ? t(lang, "health.singleTabHint") : undefined,
+	};
 }

@@ -5,6 +5,7 @@ import { deleteMember, listMembers } from "./members.js";
 import { workspacePaths } from "./paths.js";
 import { buildRestorePlan } from "./plan.js";
 import { runtimePlatform } from "./platform.js";
+import { isListIndex, resolveListIndexes } from "./selection.js";
 
 /** 默认过期时间：超过这个天数的被动死亡记录不再自动恢复（用户可显式 prune）。 */
 export const DEFAULT_MAX_AGE_DAYS = 14;
@@ -28,13 +29,13 @@ export function forgetMembers(sessionIds, paths = workspacePaths()) {
 	return removed;
 }
 
-/** 按完整 id 或唯一前缀解析用户输入；返回可删除项、未找到项与有歧义项。 */
-export function resolveMemberIds(inputs, paths = workspacePaths()) {
-	const members = listMembers(paths);
-	const ids = new Set();
+/** 数字按当前 list 顺序解析；其他输入按完整 id 或唯一前缀解析。 */
+export function resolveMemberIds(inputs, paths = workspacePaths(), members = listMembers(paths)) {
+	const indexed = resolveListIndexes(inputs.filter(isListIndex), members);
+	const ids = new Set(indexed.ids);
 	const missing = [];
 	const ambiguous = [];
-	for (const input of inputs) {
+	for (const input of inputs.filter((value) => !isListIndex(value))) {
 		const exact = members.filter((m) => m.sessionId === input);
 		const matches = exact.length ? exact : members.filter((m) => String(m.sessionId).startsWith(input));
 		if (!matches.length) {
@@ -45,7 +46,7 @@ export function resolveMemberIds(inputs, paths = workspacePaths()) {
 			ids.add(matches[0].sessionId);
 		}
 	}
-	return { ids: [...ids], missing, ambiguous };
+	return { ids: [...ids], missing, ambiguous, invalid: indexed.invalid, count: members.length };
 }
 
 /**

@@ -62,9 +62,11 @@ const MESSAGES = {
   pi-reopen restore [选项]        # 显式恢复；选项见下
   pi-reopen --dry-run             # 等价于 restore --dry-run
   pi-reopen --help | --version    # 用法 / 版本号
-  pi-reopen list [--wide|--json]  # 查看登记成员与状态
-  pi-reopen forget <id|前缀> ...  # 删除指定登记（不删除对话文件）
+  pi-reopen list [--wide|--json]  # 查看登记成员与状态（序号仅对当前列表快照有效）
+  pi-reopen show <序号|id|前缀>...# 查看会话详情
+  pi-reopen forget <序号|id|前缀>... # 删除指定登记（不删除对话文件）
   pi-reopen prune [--dry-run]     # 清理过期/无法恢复的记录（默认保留最近 14 天）
+  pi-reopen setup                 # 引导式首次安装检查（只读，不修改系统配置）
   pi-reopen doctor                # 环境检查（平台 / WezTerm / pi / 进程身份）
   pi-reopen clear                 # 清空登记（不删除对话文件）
 
@@ -72,7 +74,8 @@ restore 选项：
   --dry-run            只打印计划，不开标签页
   --no-wait            发出请求后立即返回，不等待 pi 登记确认
   --json               输出机器可读的 JSON（便于脚本消费）
-  --only <模式>        只恢复匹配的会话；子串或 * 通配符，可重复/逗号分隔
+  --interactive        显示当前列表并输入序号选择恢复，多个用逗号分隔
+  --only <模式>        只恢复匹配的会话；子串、* 通配符或当前列表序号，可重复/逗号分隔
   --limit <N>          本次最多开 N 个标签页（其余保留待下次）
 
 标签页并发打开（默认同时 5 个）；每个 wezterm cli spawn 请求超过 15s 无响应会终止并报失败，连续 3 次请求失败提前停止；
@@ -86,9 +89,11 @@ Usage:
   pi-reopen restore [options]     # explicit restore, see options below
   pi-reopen --dry-run             # same as restore --dry-run
   pi-reopen --help | --version    # usage / version
-  pi-reopen list [--wide|--json]  # list registered members and their state
-  pi-reopen forget <id|prefix>... # drop specific records (conversation files untouched)
+  pi-reopen list [--wide|--json]  # list members and state (indexes belong to the current list snapshot)
+  pi-reopen show <index|id|prefix>... # show session details
+  pi-reopen forget <index|id|prefix>... # drop records (conversation files untouched)
   pi-reopen prune [--dry-run]     # drop expired/unrecoverable records (keeps the last 14 days)
+  pi-reopen setup                 # guided first-run checks (read-only; no system changes)
   pi-reopen doctor                # environment check (platform / WezTerm / pi / identity)
   pi-reopen clear                 # clear all records (conversation files untouched)
 
@@ -96,7 +101,8 @@ restore options:
   --dry-run            print the plan only, open no tabs
   --no-wait            return after requesting tabs, without waiting for registration
   --json               machine-readable JSON output
-  --only <pattern>     restore only matching sessions; substring or * glob, repeatable/comma-separated
+  --interactive        show the current list and select indexes to restore, comma-separated
+  --only <pattern>     restore matching sessions; substring, * glob or current-list index, repeatable/comma-separated
   --limit <N>          open at most N tabs this run; the rest stay for next time
 
 Tabs open concurrently (5 at a time by default); each 'wezterm cli spawn' request is aborted after 15s; 3 consecutive failures stop early.
@@ -104,10 +110,23 @@ By default it waits for every pi to start and register before reporting; --no-wa
 
 Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested but unconfirmed; 4 skipped only.`,
 	},
-	"cli.forgetUsage": { zh: "用法：pi-reopen forget <会话 id 或唯一前缀> [...]", en: "Usage: pi-reopen forget <session id or unique prefix> [...]" },
+	"cli.forgetUsage": { zh: "用法：pi-reopen forget <当前列表序号、会话 id 或唯一前缀> [...]", en: "Usage: pi-reopen forget <current-list index, session id or unique prefix> [...]" },
+	"cli.showUsage": { zh: "用法：pi-reopen show <当前列表序号、会话 id 或唯一前缀> [...]", en: "Usage: pi-reopen show <current-list index, session id or unique prefix> [...]" },
 	"cli.forgetAmbiguous": { zh: "✖ 前缀「{input}」有歧义，匹配：{candidates}", en: "✖ Prefix \"{input}\" is ambiguous, matches: {candidates}" },
 	"cli.forgetRemoved": { zh: "已移除 {n} 条登记{missing}", en: "Removed {n} record(s){missing}" },
 	"cli.forgetMissing": { zh: "；未找到：{list}", en: "; not found: {list}" },
+	"cli.showMissing": { zh: "✖ 未找到：{list}", en: "✖ Not found: {list}" },
+	"cli.invalidIndex": { zh: "✖ 当前列表序号无效：{list}（当前共 {n} 条）。序号不是稳定 ID，请先重新运行 pi-reopen list。", en: "✖ Invalid current-list index(es): {list} (the list has {n} item(s)). Indexes are not stable IDs; run pi-reopen list again." },
+	"cli.interactiveUsage": { zh: "--interactive 不能与 --only 或 --json 同时使用。用法：pi-reopen restore --interactive [--dry-run|--no-wait|--limit N]", en: "--interactive cannot be combined with --only or --json. Usage: pi-reopen restore --interactive [--dry-run|--no-wait|--limit N]" },
+	"cli.restorePrompt": { zh: "输入当前列表序号，多个用逗号分隔；直接回车取消：", en: "Enter current-list indexes separated by commas; press Enter to cancel: " },
+	"cli.restoreCancelled": { zh: "已取消，未打开标签页。", en: "Cancelled; no tabs opened." },
+	"cli.detailHeading": { zh: "#{index} {title}", en: "#{index} {title}" },
+	"cli.detailState": { zh: "  状态：{state}", en: "  State: {state}" },
+	"cli.detailId": { zh: "  会话 ID：{id}", en: "  Session ID: {id}" },
+	"cli.detailCwd": { zh: "  工作目录：{cwd}", en: "  Working directory: {cwd}" },
+	"cli.detailFile": { zh: "  会话文件：{file}", en: "  Session file: {file}" },
+	"cli.detailTime": { zh: "  登记时间：{time}", en: "  Registered: {time}" },
+	"cli.detailPid": { zh: "  记录进程 PID：{pid}", en: "  Recorded process PID: {pid}" },
 	"cli.pruneItem": { zh: "  − {title}：{cwd}", en: "  − {title}: {cwd}" },
 	"cli.pruneDryRun": { zh: "[dry-run] 将清理 {n} 条记录{kept}", en: "[dry-run] would remove {n} record(s){kept}" },
 	"cli.pruneDone": { zh: "已清理 {n} 条记录{kept}", en: "Removed {n} record(s){kept}" },
@@ -123,6 +142,7 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 		en: "No registered members. Pis still open when WezTerm closes are recorded on their next start.",
 	},
 	"cli.listIndex": { zh: "#", en: "#" },
+	"cli.listSnapshot": { zh: "序号仅对当前列表快照有效，可用于 restore --only、restore --interactive、show 和 forget；不是稳定 ID。", en: "Indexes belong to this list snapshot and work with restore --only, restore --interactive, show and forget; they are not stable IDs." },
 	"cli.listState": { zh: "状态", en: "STATE" },
 	"cli.listSession": { zh: "会话", en: "SESSION" },
 	"cli.listPath": { zh: "路径", en: "PATH" },
@@ -144,8 +164,9 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 	"health.registryMissing": { zh: "尚未创建", en: "not created yet" },
 	"health.registryHint": { zh: "登记目录不可写；检查权限或 PI_CODING_AGENT_DIR", en: "Registry directory is not writable; check permissions or PI_CODING_AGENT_DIR" },
 	"health.registryMissingHint": { zh: "目录会在扩展首次登记时创建；确认 pi install 已生效并在 Pi 中 /reload", en: "The directory is created on first registration; verify pi install took effect and run /reload in Pi" },
-	"health.extension": { zh: "扩展加载", en: "Extension loaded" },
-	"health.extensionDetail": { zh: "v{version} · {ts}", en: "v{version} · {ts}" },
+	"health.extension": { zh: "扩展运行状态", en: "Extension running" },
+	"health.extensionDetail": { zh: "当前进程仍在运行 · v{version} · {ts}", en: "recorded process is alive · v{version} · {ts}" },
+	"health.extensionStale": { zh: "仅有历史自述 v{version} · {ts}；对应进程已退出或身份无法核验", en: "historical record only (v{version} · {ts}); its process exited or its identity cannot be verified" },
 	"health.extensionMissing": { zh: "未发现扩展自述文件", en: "no extension record found" },
 	"health.extensionHint": { zh: "扩展未加载或未安装：在每个已打开的 Pi 中执行 /reload（或重启），并确认 pi list 中只有一份 pi-reopen", en: "Extension is not loaded/installed: run /reload (or restart) in each open Pi and make sure pi list has exactly one pi-reopen entry" },
 	"health.version": { zh: "版本一致性", en: "Version match" },
@@ -165,6 +186,43 @@ Exit codes: 0 ok; 1 request failed/usage error; 2 preflight failed; 3 requested 
 		zh: "如果你刚安装：在每个已打开的 Pi 中执行 /reload（或重启）后才会开始登记；从未发过消息的窗口不会登记。",
 		en: "If you just installed: run /reload (or restart) in each open Pi to start recording; windows that never sent a message are not recorded.",
 	},
+	"health.singleTab": { zh: "WSL 单标签关闭识别", en: "WSL single-tab close detection" },
+	"health.singleTabAvailable": { zh: "可用（WEZTERM_PANE={pane}）", en: "available (WEZTERM_PANE={pane})" },
+	"health.singleTabUnavailable": { zh: "不可用：缺少 WEZTERM_PANE，关单个标签页时将退化为总是保留记录", en: "unavailable: WEZTERM_PANE is missing, so closing one tab always keeps its record" },
+	"health.singleTabDisabled": { zh: "已禁用（PI_REOPEN_FORGET_ON_TAB_CLOSE=0）；总是保留记录", en: "disabled (PI_REOPEN_FORGET_ON_TAB_CLOSE=0); records are always kept" },
+	"health.singleTabHint": {
+		zh: "在 Windows PowerShell 中执行以下命令（保留已有 WSLENV），再重启 WezTerm；工具不会替你修改：\n$old = [Environment]::GetEnvironmentVariable('WSLENV', 'User')\nif (($old -split ':') -notcontains 'WEZTERM_PANE') { setx WSLENV (($old, 'WEZTERM_PANE' | Where-Object { $_ }) -join ':') }",
+		en: "Run this in Windows PowerShell to preserve and extend WSLENV, then restart WezTerm; this tool does not change it for you:\n$old = [Environment]::GetEnvironmentVariable('WSLENV', 'User')\nif (($old -split ':') -notcontains 'WEZTERM_PANE') { setx WSLENV (($old, 'WEZTERM_PANE' | Where-Object { $_ }) -join ':') }",
+	},
+
+	// 引导式安装
+	"setup.header": { zh: "pi-reopen 首次安装检查（当前 CLI v{version}；只读检查，不修改系统配置）", en: "pi-reopen first-run setup (current CLI v{version}; read-only checks, no system changes)" },
+	"setup.extensionInstalled": { zh: "扩展安装来源", en: "Extension installation" },
+	"setup.extensionInstalledDetail": { zh: "{sources}", en: "{sources}" },
+	"setup.extensionRuntimeOnly": { zh: "由扩展自述确认（未识别安装来源）", en: "confirmed by its runtime record (installation source not identified)" },
+	"setup.extensionNotInstalled": { zh: "未发现已安装或曾经加载的扩展", en: "no installed or previously loaded extension found" },
+	"setup.installExtensionCommand": { zh: "pi install npm:@ellieyujin/pi-reopen@latest", en: "pi install npm:@ellieyujin/pi-reopen@latest" },
+	"setup.installCliCommand": { zh: "npm install -g @ellieyujin/pi-reopen@latest --omit=peer", en: "npm install -g @ellieyujin/pi-reopen@latest --omit=peer" },
+	"setup.cliPath": { zh: "全局 CLI 与 PATH", en: "Global CLI and PATH" },
+	"setup.cliPathDetail": { zh: "{path} · v{version}", en: "{path} · v{version}" },
+	"setup.cliPathMissing": { zh: "PATH 中找不到 pi-reopen", en: "pi-reopen was not found on PATH" },
+	"setup.cliPathHint": { zh: "先全局安装 CLI，再把 npm 全局 bin 目录加入当前平台的 PATH", en: "Install the CLI globally, then add npm's global bin directory to PATH for this platform" },
+	"setup.cliPathVersion": { zh: "PATH 中 CLI 版本", en: "CLI version on PATH" },
+	"setup.cliPathVersionDetail": { zh: "PATH v{path} / 当前运行 v{current}", en: "PATH v{path} / currently running v{current}" },
+	"setup.cliPathVersionUnknown": { zh: "无法读取 PATH 中 CLI 的版本；请运行 pi-reopen --version 核对", en: "could not read the PATH CLI version; run pi-reopen --version to verify" },
+	"setup.updateBothCommand": { zh: "分别更新扩展与全局 CLI，保持版本一致", en: "Update the extension and global CLI separately to the same version" },
+	"setup.duplicates": { zh: "重复/旧扩展入口", en: "Duplicate/legacy extension entries" },
+	"setup.duplicatesNone": { zh: "未发现重复配置", en: "none found" },
+	"setup.duplicatesDetail": { zh: "发现多个可能同时加载的入口：{entries}", en: "multiple entries may load together: {entries}" },
+	"setup.duplicatesHint": { zh: "运行 pi list 核对来源，只禁用或移除旧入口；不要删除会话、登记或认证文件", en: "Run pi list and disable/remove only old entries; do not delete sessions, registrations or auth files" },
+	"setup.pathCommandPosix": { zh: "export PATH=\"$(npm prefix -g)/bin:$PATH\"  # 同时写入你的 Shell 启动文件", en: "export PATH=\"$(npm prefix -g)/bin:$PATH\"  # also add this to your shell startup file" },
+	"setup.pathCommandWindows": { zh: "$env:PATH = \"$(npm prefix -g);$env:PATH\"  # 并在 Windows 用户环境变量中持久配置", en: "$env:PATH = \"$(npm prefix -g);$env:PATH\"  # also persist it in Windows user environment variables" },
+	"setup.reloadStep": { zh: "在每个已打开的 Pi 中执行 /reload，或重启 Pi；然后重新运行 pi-reopen setup", en: "Run /reload in every open Pi (or restart Pi), then run pi-reopen setup again" },
+	"setup.duplicatesStep": { zh: "pi list  # 核对上面的重复入口，再用 pi remove <旧的精确来源> 清理", en: "pi list  # verify the entries above, then use pi remove <exact old source>" },
+	"setup.restoreStep": { zh: "pi-reopen restore --dry-run  # 安装检查通过，预览首次恢复", en: "pi-reopen restore --dry-run  # setup checks passed; preview the first restore" },
+	"setup.nextHeader": { zh: "下一步（仅需执行适用于你的命令；工具不会自动运行）：", en: "Next steps (run only what applies; this tool does not run them):" },
+	"setup.nextStep": { zh: "  {n}. {step}", en: "  {n}. {step}" },
+	"setup.ready": { zh: "安装与运行检查完成；警告项不阻塞恢复。", en: "Installation and runtime checks complete; warnings do not block restore." },
 
 	// 预检
 	"pf.terminal": { zh: "终端适配器", en: "Terminal adapter" },

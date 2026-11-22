@@ -25,7 +25,7 @@ export function tabTitle(entry) {
 }
 
 /** 只读：列出全部成员与状态（list / dry-run 共用）。 */
-export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs, only } = {}) {
+export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs, only, onlyIds } = {}) {
 	const { members, unsupported } = readMembers(paths);
 	const plan = buildRestorePlan({
 		members,
@@ -38,6 +38,7 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 		now,
 		maxAgeMs: maxAgeMs ?? maxAgeMsFromEnv(env),
 		only,
+		onlyIds,
 	});
 	return { members, plan, unsupported };
 }
@@ -88,13 +89,14 @@ export async function runRestore({
 	owners,
 	titleSetter,
 	only,
+	onlyIds,
 } = {}) {
 	const pre = preflight({ env, platform, prober, piProber });
 	if (!pre.ok) {
 		return { ok: false, stage: "preflight", checks: pre.checks };
 	}
 	sweepClaims(paths);
-	const { plan } = inspect({ paths, owners, env, platform: pre.platform, distro: pre.distro, only });
+	const { plan } = inspect({ paths, owners, env, platform: pre.platform, distro: pre.distro, only, onlyIds });
 	if (dryRun) {
 		return { ok: true, stage: "dry-run", plan };
 	}

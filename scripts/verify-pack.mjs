@@ -23,6 +23,8 @@ const REQUIRED = [
 	"extensions/index.ts",
 	"src/cli.js",
 	"src/restore.js",
+	"src/setup.js",
+	"src/selection.js",
 	"src/terminals/wezterm.js",
 	"src/i18n.js",
 	"docs/PLATFORMS.md",
@@ -101,6 +103,10 @@ try {
 	out = run("restore", "--dry-run");
 	assert.equal(out.status, 0, out.stderr);
 	assert.match(out.stdout, /to restore/, "打包后的 restore --dry-run 必须可用");
+
+	out = run("setup");
+	assert.equal(out.status, 2, out.stderr);
+	assert.match(out.stdout, /first-run setup/, "打包后的 setup 必须可用并如实报告未安装扩展");
 
 	// 预检失败要如实返回 2，而不是崩溃或假装成功
 	out = run("restore", "--dry-run", "--json");

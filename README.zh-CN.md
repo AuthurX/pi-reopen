@@ -54,8 +54,10 @@
 ```bash
 pi install npm:@ellieyujin/pi-reopen@latest
 npm install -g @ellieyujin/pi-reopen@latest --omit=peer
-pi-reopen doctor
+pi-reopen setup
 ```
+
+`setup` 会集中检查扩展安装来源、当前是否仍有扩展进程运行、全局 CLI 与 PATH、两侧版本及重复旧入口，并按当前平台列出下一步命令。它只读检查，不会执行 `sudo`、`setx` 或修改任何系统配置。
 
 在已有 Pi 会话中运行 `/reload` 开始登记。关闭并重新打开 WezTerm 后：
 
@@ -112,15 +114,28 @@ Pi 内等价入口：
 | `pi-reopen`（即 `pi-reopen restore`） | 补开上次关闭时仍打开的 Pi；运行中的跳过 |
 | `pi-reopen restore --dry-run` | 只打印计划，不开标签页 |
 | `pi-reopen restore --no-wait` | 发出请求后立即返回，不等待 pi 登记确认 |
-| `pi-reopen restore --only <模式>` | 只恢复匹配的会话（子串或 `*` 通配符；匹配名称、路径、id） |
+| `pi-reopen restore --only <模式>` | 只恢复匹配的会话（子串、`*` 通配符或当前列表序号；匹配名称、路径、id） |
+| `pi-reopen restore --interactive` | 显示当前列表，输入序号选择要恢复的会话 |
 | `pi-reopen restore --limit <N>` | 本次最多开 N 个标签页，其余留待下次 |
 | `pi-reopen restore --json` | 输出机器可读的 JSON |
 | `pi-reopen list [--wide\|--json]` | 列出登记成员与状态；长内容默认按终端宽度截断 |
-| `pi-reopen forget <id\|前缀> ...` | 删除指定登记（不删除对话文件） |
+| `pi-reopen show <序号\|id\|前缀> ...` | 查看指定会话的状态、路径、会话文件与登记信息 |
+| `pi-reopen forget <序号\|id\|前缀> ...` | 删除指定登记（不删除对话文件） |
 | `pi-reopen prune [--dry-run]` | 清理过期/无法恢复的记录（默认保留最近 14 天） |
-| `pi-reopen doctor` | 环境与登记健康检查（平台 / WezTerm / pi / 进程身份 / 扩展 / 版本一致性） |
+| `pi-reopen setup` | 引导式首次安装检查；只提示命令，不修改系统配置 |
+| `pi-reopen doctor` | 环境与登记健康检查（含扩展进程身份、版本一致性与 WSL 单标签关闭识别） |
 | `pi-reopen clear` | 清空登记与启动占用（不删除对话文件与旧格式记录） |
 | `pi-reopen --help` / `--version` | 用法 / 版本号 |
+
+`list` 的 `#` 是**当前列表快照中的序号，不是稳定 ID**。每次命令都按最新列表的相同顺序重新解析；列表增删或时间顺序变化后，应先重新运行 `pi-reopen list`。纯数字输入优先解释为序号，会话 ID 或唯一前缀仍可使用。
+
+```bash
+pi-reopen list
+pi-reopen restore --only 1,3 --dry-run
+pi-reopen show 2
+pi-reopen forget 2
+pi-reopen restore --interactive
+```
 
 `list` 状态：运行中 / 启动占用中 / 待恢复 / 已过期 / 已在其他窗口打开 / 工作目录缺失 / 会话文件缺失 / 未匹配 `--only` / 本次未处理（超出 `--limit`）/ 其他平台或发行版 / 重复条目。
 
@@ -135,14 +150,14 @@ Pi 内等价入口：
 ```bash
 pi install npm:@ellieyujin/pi-reopen@latest
 npm install -g @ellieyujin/pi-reopen@latest --omit=peer
-pi-reopen doctor
+pi-reopen setup
 ```
 
 - `pi install` 注册并加载扩展，但不保证 CLI 在普通 Shell 的 PATH 中；`npm install -g` 安装外部 CLI（npm 全局 bin 目录同样需在 PATH）
-- CLI 不依赖 Pi 的 peer 包，因此用 `--omit=peer` 避免额外安装宿主；两处安装需分别更新并保持同一版本（`pi-reopen doctor` 会报告版本不一致）
+- CLI 不依赖 Pi 的 peer 包，因此用 `--omit=peer` 避免额外安装宿主；两处安装需分别更新并保持同一版本（`pi-reopen setup` / `doctor` 会报告版本不一致）
 - `pi install` 只声明最低 peer 版本（`>=1.5.0`），不设上界：任何更新的 Pi 版本都可以直接安装
 
-**登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的本地扩展入口（例如 `open-all.ts` 符号链接或单独的 `pi-reopen` 副本）；迁移前用 `pi list` 和个人扩展目录核对，只禁用旧入口，不要删除会话或认证文件。
+**登记依赖扩展**：只安装 CLI 无法记录会话。安装后需在每个已打开的 Pi 中执行 `/reload` 或重启；全新安装无法精确恢复此前未登记的窗口。不要同时加载旧的本地扩展入口（例如 `open-all.ts` 符号链接或单独的 `pi-reopen` 副本）；`pi-reopen setup` 会检查包来源和个人扩展目录中的疑似重复入口，再用 `pi list` 人工核对，只禁用旧入口，不要删除会话或认证文件。`doctor`/`setup` 通过 PID、进程启动时间和 boot ID 核验扩展自述；旧 `extension.json` 文件本身不再代表扩展当前仍在运行。
 
 ### 从已撤包的短包名迁移
 
@@ -168,7 +183,7 @@ pi install .
 mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/bin/pi-reopen.js" "$HOME/.local/bin/pi-reopen"
 export PATH="$HOME/.local/bin:$PATH"
-pi-reopen doctor
+pi-reopen setup
 ```
 
 把 PATH 配置写进 shell 启动文件。若 CLI 符号链接已存在，先检查其指向，不要盲目覆盖。

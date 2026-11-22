@@ -48,7 +48,7 @@ function dedupeKey(sessionFile) {
  * live        进程仍存活，跳过（也自然排除了发起恢复的当前会话）
  * claimed     其他恢复进程正在启动它，跳过
  * expired     记录早于 maxAgeMs（默认 14 天），不再自动恢复，可用 prune 清理
- * filtered    未匹配 --only 过滤器，本次不恢复
+ * filtered    未匹配 --only 过滤器或列表序号选择，本次不恢复
  * wrong-platform 记录来自其他系统/发行版（共用 agent 目录时），跳过并报告
  * missing-cwd 工作目录不存在，跳过并报告
  * missing-file 会话文件不存在（未落盘/已删除），跳过并报告
@@ -68,6 +68,7 @@ export function buildRestorePlan({
 	now = Date.now(),
 	maxAgeMs,
 	only,
+	onlyIds,
 }) {
 	const seen = new Set();
 	const items = [];
@@ -102,7 +103,11 @@ export function buildRestorePlan({
 					} else if (Number.isFinite(maxAgeMs) && now - (entry.ts ?? 0) > maxAgeMs) {
 						// 过期判定放在最后：缺文件/缺目录比“太久没动”更具体、更可操作。
 						state = "expired";
-					} else if (only?.length && !only.some((pattern) => matchesOnly(entry, pattern))) {
+					} else if (
+						(only?.length || onlyIds?.length)
+						&& !onlyIds?.includes(entry.sessionId)
+						&& !only?.some((pattern) => matchesOnly(entry, pattern))
+					) {
 						state = "filtered";
 					}
 				}
