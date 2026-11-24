@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { workspacePaths } from "./paths.js";
 
 /** 记录结构版本：新增字段时递增；旧记录缺少新字段时按“未知”兼容处理。 */
-export const MEMBER_SCHEMA = 2;
+export const MEMBER_SCHEMA = 3;
 
 /**
  * 成员记录语义（已确认规则）：
@@ -24,10 +24,34 @@ function writeAtomic(file, data) {
 	renameSync(temp, file);
 }
 
+export function deleteCloseIntent(sessionId, paths = workspacePaths()) {
+	try {
+		unlinkSync(join(paths.closing, `${sessionId}.json`));
+	} catch {
+		/* 不存在即目标状态 */
+	}
+}
+
+export function writeCloseIntent(entry, paths = workspacePaths()) {
+	if (!entry?.sessionId) return;
+	mkdirSync(paths.closing, { recursive: true });
+	const { sessionId, ts, pid, processStart, bootId, paneId, weztermPid } = entry;
+	writeAtomic(join(paths.closing, `${sessionId}.json`), JSON.stringify({ sessionId, ts, pid, processStart, bootId, paneId, weztermPid }));
+}
+
+export function readCloseIntent(sessionId, paths = workspacePaths()) {
+	try {
+		return JSON.parse(readFileSync(join(paths.closing, `${sessionId}.json`), "utf8"));
+	} catch {
+		return undefined;
+	}
+}
+
 export function writeMember(entry, paths = workspacePaths()) {
 	mkdirSync(paths.members, { recursive: true });
 	const record = { schemaVersion: MEMBER_SCHEMA, ...entry };
 	writeAtomic(join(paths.members, `${entry.sessionId}.json`), JSON.stringify(record, null, 2));
+	deleteCloseIntent(entry.sessionId, paths);
 }
 
 export function readMember(sessionId, paths = workspacePaths()) {
@@ -46,6 +70,7 @@ export function deleteMember(sessionId, paths = workspacePaths()) {
 			/* 不存在即目标状态 */
 		}
 	}
+	deleteCloseIntent(sessionId, paths);
 }
 
 /**
@@ -90,7 +115,7 @@ export function listMembers(paths = workspacePaths()) {
 /** 清空登记与启动占用；不触碰旧格式文件与对话文件。 */
 export function clearWorkspace(paths = workspacePaths()) {
 	let removed = 0;
-	for (const dir of [paths.members, paths.claims, paths.legacyMembers, paths.legacyClaims].filter(Boolean)) {
+	for (const dir of [paths.members, paths.closing, paths.claims, paths.legacyMembers, paths.legacyClaims].filter(Boolean)) {
 		let files;
 		try {
 			files = readdirSync(dir);

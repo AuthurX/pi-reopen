@@ -19,6 +19,7 @@ export function workspacePaths(env = process.env) {
 		agent,
 		workspace,
 		members: join(workspace, "members"),
+		closing: join(workspace, "closing"),
 		claims: join(workspace, "starting"),
 		legacyWorkspace,
 		legacyMembers: join(legacyWorkspace, "members"),

@@ -20,10 +20,15 @@ function isFile(path) {
 	}
 }
 
+function validPaneId(value) {
+	return Number.isSafeInteger(value) && value >= 0;
+}
+
 /** WezTerm 向 pane 内的进程注入 WEZTERM_PANE；不在 WezTerm 内运行时为 undefined。 */
 export function currentPaneId(env = process.env) {
+	if (env.WEZTERM_PANE === undefined || String(env.WEZTERM_PANE).trim() === "") return undefined;
 	const paneId = Number(env.WEZTERM_PANE);
-	return Number.isSafeInteger(paneId) && paneId > 0 ? paneId : undefined;
+	return validPaneId(paneId) ? paneId : undefined;
 }
 
 /** 显式路径 → PATH → 常见安装位置 → where.exe + wslpath。 */
@@ -178,7 +183,7 @@ export async function spawnTab({
 
 /** 设置标签页标题；失败不影响恢复结果（标题只是装饰）。 */
 export function setTabTitle({ program, wezterm, paneId, title, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
-	if (!Number.isSafeInteger(paneId) || paneId <= 0 || !title) return false;
+	if (!validPaneId(paneId) || !title) return false;
 	const run = runner ?? ((executable, args) =>
 		spawnSync(executable, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
 	try {
@@ -188,12 +193,71 @@ export function setTabTitle({ program, wezterm, paneId, title, env = process.env
 	}
 }
 
+function validClientPid(client) {
+	const pid = Number(client?.pid);
+	return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+function listClients({ program, wezterm, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
+	const run = runner ?? ((executable, args) =>
+		spawnSync(executable, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
+	try {
+		const out = run(program || wezterm || "wezterm", ["cli", "list-clients", "--format", "json"]);
+		if (out?.status !== 0) return undefined;
+		const clients = JSON.parse(String(out.stdout ?? ""));
+		return Array.isArray(clients) ? clients : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** 当前 pane 所属 GUI 客户端 PID；多客户端下无法明确关联时不猜测。 */
+export function clientPid({ paneId, ...options } = {}) {
+	const clients = listClients(options);
+	if (!clients) return undefined;
+	const valid = clients.map((client) => ({ client, pid: validClientPid(client) })).filter((item) => item.pid);
+	if (valid.length !== clients.length) return undefined;
+	if (validPaneId(paneId)) {
+		const matches = valid.filter(({ client }) => client?.focused_pane_id === paneId);
+		if (matches.length !== 1) return matches.length > 1 ? undefined : clientPidFromUnique(valid);
+		return matches[0].pid;
+	}
+	return clientPidFromUnique(valid);
+}
+
+function clientPidFromUnique(clients) {
+	const pids = new Set(clients.map((item) => item.pid));
+	return pids.size === 1 ? clients[0].pid : undefined;
+}
+
+/** 当前 mux 上全部有效 GUI 客户端 PID；查询失败或没有有效客户端时返回 undefined。 */
+export function clientPids(options = {}) {
+	const clients = listClients(options);
+	if (!clients) return undefined;
+	const pids = [...new Set(clients.map(validClientPid).filter(Boolean))];
+	return pids.length ? pids : undefined;
+}
+
+/** 当前实例的 pane 列表；查询或解析失败返回 undefined。 */
+export function listPanes({ program, wezterm, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
+	const run = runner ?? ((executable, args) =>
+		spawnSync(executable, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
+	try {
+		const out = run(program || wezterm || "wezterm", ["cli", "list", "--format", "json"]);
+		if (out?.status !== 0) return undefined;
+		const panes = JSON.parse(String(out.stdout ?? ""));
+		return Array.isArray(panes) ? panes : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * 判断 pane 是否仍存在：
  * true 还在（主动 /quit），false 已消失（窗口关闭），undefined 无法判断。
  */
 export function paneExists(paneId, { program, wezterm, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
-	if (!Number.isSafeInteger(paneId) || paneId <= 0) return undefined;
+	if (!validPaneId(paneId)) return undefined;
 	const run = runner ?? ((executable, args) =>
 		spawnSync(executable, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
 	try {
@@ -201,7 +265,7 @@ export function paneExists(paneId, { program, wezterm, env = process.env, runner
 		if (out?.status !== 0) return undefined;
 		const panes = JSON.parse(String(out.stdout ?? ""));
 		if (!Array.isArray(panes)) return undefined;
-		return panes.some((pane) => Number(pane?.pane_id) === paneId);
+		return panes.some((pane) => pane?.pane_id === paneId);
 	} catch {
 		return undefined;
 	}
@@ -213,7 +277,7 @@ export function paneExists(paneId, { program, wezterm, env = process.env, runner
  */
 export function otherPanesExist(excludePaneId, { program, wezterm, env = process.env, runner, timeoutMs = PANE_QUERY_TIMEOUT_MS } = {}) {
 	// 自己的 pane id 无效时无法排除自身：按“无法判断”处理，保守保留记录。
-	if (!Number.isSafeInteger(excludePaneId) || excludePaneId <= 0) return undefined;
+	if (!validPaneId(excludePaneId)) return undefined;
 	const run = runner ?? ((executable, args) =>
 		spawnSync(executable, args, { env, encoding: "utf8", timeout: timeoutMs, windowsHide: true }));
 	try {
@@ -221,10 +285,7 @@ export function otherPanesExist(excludePaneId, { program, wezterm, env = process
 		if (out?.status !== 0) return undefined;
 		const panes = JSON.parse(String(out.stdout ?? ""));
 		if (!Array.isArray(panes)) return undefined;
-		return panes.some((pane) => {
-			const id = Number(pane?.pane_id);
-			return Number.isSafeInteger(id) && id !== excludePaneId;
-		});
+		return panes.some((pane) => validPaneId(pane?.pane_id) && pane.pane_id !== excludePaneId);
 	} catch {
 		return undefined;
 	}

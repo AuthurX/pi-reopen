@@ -40,7 +40,7 @@ test("real wezterm cli spawn creates a pane, and set-tab-title applies", { skip 
 	});
 	assert.equal(result.ok, true, result.error);
 	const paneId = parsePaneId(result.stdout);
-	assert.ok(paneId > 0, `spawn 必须返回 pane id，实际：${result.stdout}`);
+	assert.ok(paneId >= 0, `spawn 必须返回 pane id，实际：${result.stdout}`);
 
 	t.after(() => spawnSync(wezterm, ["cli", "kill-pane", "--pane-id", String(paneId)]));
 	assert.ok(listPanes().some((pane) => pane.pane_id === paneId), "新 pane 必须出现在 cli list 中");

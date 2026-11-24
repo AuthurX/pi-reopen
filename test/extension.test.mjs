@@ -94,7 +94,7 @@ test('extension writes a self-record so doctor can detect it', async (t) => {
   const f = await loadExtension(t);
   const record = JSON.parse(fs.readFileSync(join(f.agentDir, 'pi-reopen', 'extension.json'), 'utf8'));
   assert.match(record.version, /^\d+\.\d+\.\d+/);
-  assert.equal(record.schemaVersion, 2);
+  assert.equal(record.schemaVersion, 3);
   assert.ok(record.ts > 0);
   assert.equal(record.pid, process.pid);
   assert.ok(record.processStart, '自述需包含进程启动身份，不能仅靠文件存在判断运行状态');
@@ -112,7 +112,7 @@ test('extension registers command/shortcut; only tui mode records members', asyn
   assert.equal(member.sessionId, 'current');
   assert.equal(member.cwd, f.home);
   assert.ok(member.pid > 0 && member.bootId, 'live identity recorded');
-  assert.equal(member.schemaVersion, 2, '记录结构版本必须落盘');
+  assert.equal(member.schemaVersion, 3, '记录结构版本必须落盘');
   assert.ok(['wsl', 'linux', 'darwin', 'win32'].includes(member.platform), '记录来源平台');
   assert.equal(typeof member.user, 'string', '记录用户，便于诊断跨用户共用目录');
 });
@@ -161,6 +161,8 @@ for (const signal of ['SIGHUP', 'SIGTERM']) {
     for (const listener of [...process.listeners(signal)]) listener();
     await shutdown;
     assert.equal(f.memberCount(), 1, 'terminal shutdown must not delete the restore member');
+    assert.equal(fs.existsSync(join(f.agentDir, 'pi-reopen', 'closing', 'current.json')), ON_WSL,
+      '仅 WSL 需要留下供健康 CLI 校准的关闭意图');
   });
 }
 

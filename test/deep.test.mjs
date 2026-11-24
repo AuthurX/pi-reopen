@@ -10,15 +10,16 @@ import test from 'node:test';
 process.env.PI_WORKSPACE_LANG ??= 'zh';
 import { workspacePaths } from '../src/paths.js';
 import { currentBootId, isLive, processStart } from '../src/liveness.js';
-import { deleteMember, listMembers, writeMember } from '../src/members.js';
+import { clearWorkspace, deleteMember, listMembers, readCloseIntent, writeCloseIntent, writeMember } from '../src/members.js';
 import { CLAIM_TTL_MS, claimSession, readClaim, releaseClaim, sweepClaims } from '../src/claims.js';
 import { buildRestorePlan, matchesOnly, resolveSessionFile } from '../src/plan.js';
 import { normalizeSessionPath, scanSessionOwners } from '../src/inuse.js';
 import { parsePaneId, sanitizeTitle } from '../src/pane.js';
-import { otherPanesExist } from '../src/terminals/wezterm.js';
+import { clientPid, clientPids, currentPaneId, otherPanesExist, setTabTitle } from '../src/terminals/wezterm.js';
+import { reconcileClosedTabs } from '../src/reconcile.js';
 import { openTab, shellQuote } from '../src/spawn.js';
 import { preflight } from '../src/preflight.js';
-import { EXIT, defaultWaitTimeoutMs, exitCodeFor, inspect, label, runRestore, summarize, tabTitle } from '../src/restore.js';
+import { EXIT, defaultWaitTimeoutMs, exitCodeFor, inspect, label, runRestore, setTitle, summarize, tabTitle } from '../src/restore.js';
 import { forgetMembers, pruneMembers, resolveMemberIds } from '../src/prune.js';
 import { collectOnly, displayWidth, jsonPayload, normalizeArgv, run as cliRun } from '../src/cli.js';
 
@@ -325,6 +326,22 @@ test('writeMember creates member files with 0600 mode', (t) => {
   assert.equal(mode, 0o600);
 });
 
+test('close intents are cleared by re-registration and member deletion', (t) => {
+  const f = fixture(t);
+  const entry = closedTabEntry('intent');
+  writeMember(entry, f.paths);
+  writeCloseIntent(entry, f.paths);
+  assert.equal(readCloseIntent('intent', f.paths).paneId, 42);
+  writeMember({ ...entry, ts: 2 }, f.paths);
+  assert.equal(readCloseIntent('intent', f.paths), undefined);
+  writeCloseIntent(entry, f.paths);
+  deleteMember('intent', f.paths);
+  assert.equal(readCloseIntent('intent', f.paths), undefined);
+  writeCloseIntent(entry, f.paths);
+  clearWorkspace(f.paths);
+  assert.equal(readCloseIntent('intent', f.paths), undefined);
+});
+
 test('runRestore reports failure without spawning when every restorable is claimed elsewhere', wslOnly, async (t) => {
   const f = fixture(t);
   const holder = spawn('sleep', ['30'], { stdio: 'ignore' });
@@ -367,6 +384,118 @@ test('otherPanesExist reports other panes and is inconclusive when it cannot tel
   assert.equal(otherPanesExist(undefined, { wezterm: 'w', runner: () => list([{ pane_id: 7 }]) }), undefined, '自己的 pane 未知 → 无法判断 → 保留记录');
   assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => ({ status: 1, stdout: '' }) }), undefined, 'cli 失败 → 无法判断');
   assert.equal(otherPanesExist(42, { wezterm: 'w', runner: () => list([{ pane_id: 42 }, null]) }), false, '坏条目不算其他 pane');
+  assert.equal(otherPanesExist(0, { wezterm: 'w', runner: () => list([{ pane_id: 0 }, { pane_id: 7 }]) }), true, 'pane 0 是合法 ID');
+  assert.equal(otherPanesExist(0, { wezterm: 'w', runner: () => list([{ pane_id: 0 }, { pane_id: null }]) }), false, 'null 不能被 Number 转成 pane 0');
+});
+
+test('pane zero works for environment discovery, client association and titles', async () => {
+  assert.equal(currentPaneId({ WEZTERM_PANE: '0' }), 0);
+  assert.equal(currentPaneId({ WEZTERM_PANE: '' }), undefined);
+  assert.equal(clientPid({ paneId: 0, wezterm: 'w', runner: () => ({ status: 0, stdout: JSON.stringify([{ pid: 123, focused_pane_id: 0 }]) }) }), 123);
+  let args;
+  assert.equal(setTabTitle({ paneId: 0, title: 'zero', wezterm: 'w', runner: (_program, argv) => { args = argv; return { status: 0 }; } }), true);
+  assert.ok(args.includes('--pane-id') && args.includes('0'));
+  assert.equal(await setTitle({ stdout: '0\n', entry: { name: 'zero' }, titleSetter: ({ paneId }) => paneId === 0 }), true);
+});
+
+test('clientPid associates a pane with its GUI client and stays inconclusive when ambiguous', () => {
+  const clients = [{ pid: 123, focused_pane_id: 42 }, { pid: 456, focused_pane_id: 7 }];
+  const runner = () => ({ status: 0, stdout: JSON.stringify(clients) });
+  assert.equal(clientPid({ paneId: 42, wezterm: 'w', runner }), 123);
+  assert.equal(clientPid({ paneId: 7, wezterm: 'w', runner }), 456);
+  assert.equal(clientPid({ wezterm: 'w', runner }), undefined, '多客户端且 pane 未知时不能取第一项');
+  assert.equal(clientPid({ paneId: 99, wezterm: 'w', runner }), undefined, '后台 pane 无焦点匹配时不能猜测');
+  assert.equal(clientPid({ paneId: 42, wezterm: 'w', runner: () => ({ status: 0, stdout: JSON.stringify([{ pid: 123 }]) }) }), 123,
+    '单客户端可关联其后台 pane');
+  assert.equal(clientPid({ paneId: 42, wezterm: 'w', runner: () => ({ status: 0, stdout: JSON.stringify([{ pid: 123, focused_pane_id: 42 }, { pid: 456, focused_pane_id: 42 }]) }) }), undefined,
+    '多个客户端聚焦同一 pane 时身份不明确');
+  assert.equal(clientPid({ wezterm: 'w', runner: () => ({ status: 1, stdout: '' }) }), undefined);
+  assert.equal(clientPid({ wezterm: 'w', runner: () => ({ status: 0, stdout: '{}' }) }), undefined);
+});
+
+test('clientPids returns every valid current client without relying on array order', () => {
+  assert.deepEqual(clientPids({ wezterm: 'w', runner: () => ({ status: 0, stdout: JSON.stringify([{ pid: 123 }, { pid: 456 }, { pid: 123 }, null]) }) }), [123, 456]);
+  assert.equal(clientPids({ wezterm: 'w', runner: () => ({ status: 0, stdout: '[]' }) }), undefined);
+  assert.equal(clientPids({ wezterm: 'w', runner: () => ({ status: 1, stdout: '' }) }), undefined);
+});
+
+function closedTabEntry(id, overrides = {}) {
+  return { sessionId: id, cwd: '/tmp', sessionFile: `/tmp/${id}.jsonl`, ts: 1,
+    pid: 999999, processStart: 'dead', bootId: 'boot-x', paneId: 42, weztermPid: 123, ...overrides };
+}
+
+test('WSL reconciliation removes a dead member only when the same GUI confirms its pane is gone', async (t) => {
+  const f = fixture(t);
+  const entry = closedTabEntry('closed');
+  writeMember(entry, f.paths);
+  writeCloseIntent(entry, f.paths);
+  const members = [entry];
+  const deleted = reconcileClosedTabs({
+    members, paths: f.paths, env: f.env, platform: 'wsl', wezterm: '/test/wezterm', bootId: 'boot-x',
+    clientPidsFn: () => [999, 123],
+    listPanesFn: () => [{ pane_id: 0 }],
+  });
+  assert.equal(deleted, 1, '登记客户端不必是当前客户端数组的第一项');
+  assert.equal(members.length, 0);
+  assert.equal(listMembers(f.paths).length, 0);
+});
+
+test('WSL reconciliation preserves live, old-instance, present-pane and inconclusive records', async (t) => {
+  const f = fixture(t);
+  const entries = [
+    closedTabEntry('old-instance', { weztermPid: 999 }),
+    closedTabEntry('present'),
+    closedTabEntry('live', { pid: process.pid, processStart: processStart(process.pid) }),
+    closedTabEntry('legacy', { paneId: undefined, weztermPid: undefined }),
+    closedTabEntry('crashed'),
+  ];
+  for (const entry of entries) writeMember(entry, f.paths);
+  writeCloseIntent(entries.find((entry) => entry.sessionId === 'present'), f.paths);
+  const members = [...entries];
+  let paneQueries = 0;
+  const deleted = reconcileClosedTabs({
+    members, paths: f.paths, env: f.env, platform: 'wsl', wezterm: '/test/wezterm', bootId: 'boot-x',
+    clientPidsFn: () => [123],
+    listPanesFn: () => { paneQueries++; return [{ pane_id: 42 }, { pane_id: 7 }]; },
+  });
+  assert.equal(deleted, 0);
+  assert.equal(paneQueries, 1, '只需为同实例的死亡记录查询 pane');
+  assert.equal(listMembers(f.paths).length, 5);
+
+  const failed = closedTabEntry('failed');
+  writeMember(failed, f.paths);
+  writeCloseIntent(failed, f.paths);
+  assert.equal(reconcileClosedTabs({
+    members: [failed], paths: f.paths, env: f.env, platform: 'wsl', wezterm: '/test/wezterm', bootId: 'boot-x',
+    clientPidsFn: () => [123], listPanesFn: () => undefined,
+  }), 0);
+  assert.ok(listMembers(f.paths).some((entry) => entry.sessionId === 'failed'));
+
+  const disabled = closedTabEntry('disabled');
+  writeMember(disabled, f.paths);
+  writeCloseIntent(disabled, f.paths);
+  assert.equal(reconcileClosedTabs({
+    members: [disabled], paths: f.paths, env: { ...f.env, PI_REOPEN_FORGET_ON_TAB_CLOSE: '0' },
+    platform: 'wsl', wezterm: '/test/wezterm', bootId: 'boot-x',
+    clientPidsFn: () => { throw new Error('禁用时不应查询'); },
+  }), 0);
+  assert.ok(listMembers(f.paths).some((entry) => entry.sessionId === 'disabled'));
+});
+
+test('WSL reconciliation does not delete a session that was registered again during inspection', async (t) => {
+  const f = fixture(t);
+  const original = closedTabEntry('reopened');
+  writeMember(original, f.paths);
+  writeCloseIntent(original, f.paths);
+  const replacement = { ...original, ts: 2, pid: process.pid, processStart: processStart(process.pid), paneId: 99 };
+  assert.equal(reconcileClosedTabs({
+    members: [original], paths: f.paths, env: f.env, platform: 'wsl', wezterm: '/test/wezterm', bootId: 'boot-x',
+    clientPidsFn: () => [123],
+    listPanesFn: () => { writeMember(replacement, f.paths); return [{ pane_id: 7 }]; },
+  }), 0);
+  const current = listMembers(f.paths).find((entry) => entry.sessionId === 'reopened');
+  assert.equal(current.ts, 2);
+  assert.equal(current.paneId, 99);
 });
 
 test('restore sets a tab title from the spawn pane id', async (t) => {

@@ -233,8 +233,8 @@ Linux/macOS/WSL 会从 PATH 和 Bash 登录环境定位 Pi。Windows 原生从 P
 
 ![How it works](https://raw.githubusercontent.com/AuthurX/pi-reopen/main/assets/how-it-works.png)
 
-- **登记**：每次 Pi 启动时把 `{会话文件绝对路径, cwd, pid, processStart, bootId, platform, distro, user, schemaVersion}` 实时写入 `~/.pi/agent/pi-reopen/members/`（每会话一个文件，原子替换）。0.3.0 及更早版本写在 `pi-workspace/` 下的记录仍可读取与清理。
-- **关闭判定**：Pi 的信号退出也会发出 `quit` 清理事件，事件名本身不可靠。扩展在 TUI 生命周期内记录 SIGHUP/SIGTERM；无信号的主动 `/quit` 或切换会话删除记录；reload 保留记录并清理监听器。没有受跟踪信号时，再向 WezTerm 查询当前 pane（`WEZTERM_PANE`）是否还存在：pane 已消失说明窗口被关闭，记录保留。默认（设置 `PI_REOPEN_FORGET_ON_TAB_CLOSE=0` 可关闭）pane 已消失但 WezTerm 还有其他 pane 时视为“关单个 tab = 任务完成”，删除记录（浏览器式“关掉的 tab 不进恢复集”）；无其他 pane 或无法判断时仍保留。硬杀导致无清理时，残留记录会被恢复。断电时最多恢复已落盘的记录，最新未落盘的改动不保证。
+- **登记**：每次 Pi 启动时把 `{会话文件绝对路径, cwd, pid, processStart, bootId, paneId, weztermPid（WSL）, platform, distro, user, schemaVersion}` 实时写入 `~/.pi/agent/pi-reopen/members/`（每会话一个文件，原子替换）。0.3.0 及更早版本写在 `pi-workspace/` 下的记录仍可读取与清理。
+- **关闭判定**：Pi 的信号退出也会发出 `quit` 清理事件，事件名本身不可靠。扩展在 TUI 生命周期内记录 SIGHUP/SIGTERM；无信号的主动 `/quit` 或切换会话删除记录；reload 保留记录并清理监听器。没有受跟踪信号时，再向 WezTerm 查询当前 pane（`WEZTERM_PANE`）是否还存在：pane 已消失说明窗口被关闭，记录保留。默认（设置 `PI_REOPEN_FORGET_ON_TAB_CLOSE=0` 可关闭）pane 已消失但 WezTerm 还有其他 pane 时视为“关单个 tab = 任务完成”，删除记录（浏览器式“关掉的 tab 不进恢复集”）；无其他 pane 或无法判断时仍保留。WSL 的 `list`/`restore` 会在健康 CLI 进程中再次校准：只有存在匹配的信号关闭标记、GUI PID 与登记一致、原 Pi 已退出、原 pane 已消失且仍有其他 pane 时才删除；无关闭标记的崩溃、WezTerm 已重开或查询失败时保留，避免误删恢复记录。硬杀导致无清理时，残留记录会被恢复。断电时最多恢复已落盘的记录，最新未落盘的改动不保证。
 - **安全启动**：标签页并发打开（默认同时 5 个）；每个 `wezterm cli spawn` 请求超过 15s 无响应会终止并报错，连续 3 次失败提前停止。`--limit` 限制批量规模。
 - **去重**：恢复前检查进程存活（pid + 启动时刻 + bootId，重启后的旧 PID 不会误判），并扫描运行中进程的 `--session <文件>`，避免对未登记的窗口重复开标签页；启动声明（60s TTL + 持有者存活检查）进一步减少重复请求。全局恢复锁（`restore.lock`，30 分钟 TTL + pid 存活 + bootId 校验）用 `O_EXCL` 原子创建，并发恢复不会同时开整批；持锁进程死亡或系统重启后可接管。
 - **确认**：“请求被接受”与“pi 已登记”分开报告；确认窗口随批量大小放大（15s + 每个会话 2s，上限 90s）。

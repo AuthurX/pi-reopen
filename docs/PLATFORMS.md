@@ -39,7 +39,7 @@ node .\bin\pi-reopen.js doctor
 - macOS `ps lstart` 精度为秒，低于 Linux/Windows 的进程创建时间精度；同一秒内极端 PID 重用仍有误判可能。
 - Windows 的进程查询会启动 PowerShell，速度比 Linux 读取 procfs 慢；大量会话需要额外性能验收。
 - 关闭事件由 Pi 与终端/ConPTY 共同决定。SIGHUP/SIGTERM 保留记录，主动 `/quit` 删除记录；没有受跟踪信号时再查询 `WEZTERM_PANE` 是否还存在（pane 消失=关窗，保留记录）。Windows/macOS 的真实关窗行为仍需实机验证。
-- WSL 下 `WEZTERM_PANE` 不会自动进入发行版：需在 Windows 侧 `WSLENV` 中加入 `WEZTERM_PANE`（保留已有值；`pi-reopen setup` 会给出 PowerShell 示例，改后重启 WezTerm 生效）。缺失时 pane 探测不可用，`PI_REOPEN_FORGET_ON_TAB_CLOSE` 退化为“总是保留记录”。`setup` 和 `doctor` 都会单独报告“WSL 单标签关闭识别”是否可用；该缺失以警告显示，不阻塞普通恢复。工具只提示命令，不自动执行 `setx` 或修改系统配置。扩展的 pane 探测与 CLI 使用同一发现逻辑：显式 `PI_REOPEN_WEZTERM` 优先，否则自动查找（WSL 下找 Windows 侧 wezterm.exe，不会误用发行版内的 wezterm）。
+- WSL 下 `WEZTERM_PANE` 不会自动进入发行版：需在 Windows 侧 `WSLENV` 中加入 `WEZTERM_PANE`（保留已有值；`pi-reopen setup` 会给出 PowerShell 示例，改后重启 WezTerm 生效）。缺失时 pane 探测不可用，`PI_REOPEN_FORGET_ON_TAB_CLOSE` 退化为“总是保留记录”。`setup` 和 `doctor` 都会单独报告“WSL 单标签关闭识别”是否可用；该缺失以警告显示，不阻塞普通恢复。工具只提示命令，不自动执行 `setx` 或修改系统配置。扩展的 pane 探测与 CLI 使用同一发现逻辑：显式 `PI_REOPEN_WEZTERM` 优先，否则自动查找（WSL 下找 Windows 侧 wezterm.exe，不会误用发行版内的 wezterm）。WSL 关窗中的进程可能无法连接 GUI socket，因此登记同时保存 `paneId` 与 GUI `weztermPid`；后续 `list`/`restore` 从健康 CLI 进程校准，仅在存在匹配的信号关闭标记、同实例、原进程死亡、原 pane 消失且仍有其他 pane 时删除；无标记崩溃和重开 WezTerm 后不会误删待恢复记录。
 - 全局恢复锁与启动声明使用 `O_EXCL` 原子创建，接管前复核记录；8 进程并发测试验证恰好一个赢家。仍不承诺跨版本（旧 CLI 写旧锁目录）的互斥。
 - 恢复前扫描运行中进程的 `--session <文件>`；即使扩展未加载或记录被清空，也不会对同一会话文件开第二个 Pi。
 - 记录带 `platform/distro/user/schemaVersion`；其他平台/发行版的记录会被跳过，比 CLI 更新的记录结构不参与恢复。

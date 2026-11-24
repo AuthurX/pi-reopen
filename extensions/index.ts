@@ -103,7 +103,18 @@ export default async function (pi: ExtensionAPI) {
 	}
 
 	const signals = ["SIGHUP", "SIGTERM"] as const;
-	const markSignalExit = () => { signalExit = true; };
+	function markCloseIntent(): void {
+		if (!currentSessionId || platform.runtimePlatform(process.env) !== "wsl") return;
+		try {
+			members.writeCloseIntent(members.readMember(currentSessionId, paths), paths);
+		} catch {
+			/* 标记失败时保持原有关闭判定，list 校准会保守保留 */
+		}
+	}
+	const markSignalExit = () => {
+		signalExit = true;
+		markCloseIntent();
+	};
 	function detachSignals(): void {
 		for (const signal of signals) process.off(signal, markSignalExit);
 	}
@@ -178,6 +189,8 @@ export default async function (pi: ExtensionAPI) {
 				pid: process.pid,
 				processStart,
 				bootId,
+				paneId: pane.currentPaneId(process.env),
+				weztermPid: resolveWeztermPid(),
 				// 共用 agent 目录时（例如 Windows 与 WSL）必须能识别记录来源，
 				// 否则会用错误的平台/发行版去启动，开出一个必然失败的标签页。
 				platform: platform.runtimePlatform(process.env),
@@ -211,6 +224,18 @@ export default async function (pi: ExtensionAPI) {
 		return weztermBinCache;
 	}
 
+	let weztermPidResolved = false;
+	let weztermPidCache: number | undefined;
+	function resolveWeztermPid(): number | undefined {
+		if (platform.runtimePlatform(process.env) !== "wsl") return undefined;
+		if (!weztermPidResolved) {
+			const wezterm = resolveWeztermBin();
+			weztermPidCache = wezterm ? pane.clientPid({ wezterm, paneId: pane.currentPaneId(process.env), env: process.env }) : undefined;
+			weztermPidResolved = weztermPidCache !== undefined;
+		}
+		return weztermPidCache;
+	}
+
 	/**
 	 * 关窗判定的第二道保险：Pi 在 SIGHUP/SIGTERM 之外也可能发出 quit。
 	 * 此时若 WezTerm 里本 pane 已经消失，说明是窗口被关闭（被动死亡）而不是主动 /quit，
@@ -219,7 +244,7 @@ export default async function (pi: ExtensionAPI) {
 	 */
 	async function paneGone(): Promise<boolean> {
 		const paneId = pane.currentPaneId(process.env);
-		if (!paneId) return false;
+		if (paneId === undefined) return false;
 		try {
 			const hooks = await loadHooks();
 			const probe = typeof hooks.paneExists === "function"
@@ -265,6 +290,7 @@ export default async function (pi: ExtensionAPI) {
 				return;
 			}
 			if (event.reason === "quit" && (await paneGone())) {
+				markCloseIntent();
 				if (await forgetIfSingleTabClosed()) members.deleteMember(currentSessionId, paths);
 				return;
 			}

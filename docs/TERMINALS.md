@@ -32,8 +32,20 @@ spawnTab({ program, distro, cwd, sessionFile, piBin, piCommand,
 // 设置标签页标题（失败只影响外观）
 setTabTitle({ program, paneId, title, env, runner }) -> boolean
 
+// 当前 pane 所属 GUI 客户端 PID；多客户端下无法明确关联时返回 undefined
+clientPid({ program, paneId, env, runner }) -> number | undefined
+
+// 当前 mux 上全部有效 GUI 客户端 PID（用于区分重开前后的实例）
+clientPids({ program, env, runner }) -> number[] | undefined
+
+// 当前实例的 pane 列表；失败返回 undefined
+listPanes({ program, env, runner }) -> Array | undefined
+
 // 当前 pane 是否还存在：true / false / undefined（无法判断）
 paneExists(paneId, { program, env, runner }) -> boolean | undefined
+
+// 除指定 pane 外是否还有其他 pane
+otherPanesExist(excludePaneId, { program, env, runner }) -> boolean | undefined
 
 // 当前进程所在 pane 的 id（用于关窗判定）
 currentPaneId(env) -> number | undefined
@@ -43,7 +55,7 @@ currentPaneId(env) -> number | undefined
 
 ## 接入新终端的最小步骤
 
-1. 新建 `src/terminals/<id>.js`，实现上述五个函数。
+1. 新建 `src/terminals/<id>.js`，实现上述接口。
 2. 在 `src/terminals/index.js` 的 `TERMINALS` 中注册。
 3. 确认 `spawnTab` 的 `stdout` 能给出新 pane 的 id（标题功能依赖它）。
 4. 若该终端不注入 pane id 环境变量，`currentPaneId` 返回 `undefined`——关窗判定会退回“信号 + quit 事件”的旧逻辑。

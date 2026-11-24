@@ -12,6 +12,7 @@ import { runtimePlatform } from "./platform.js";
 import { currentBootId } from "./liveness.js";
 import { waitForMembers } from "./verify.js";
 import { resolveLang, t } from "./i18n.js";
+import { reconcileClosedTabs } from "./reconcile.js";
 
 export function label(state, lang = resolveLang()) {
 	const key = `state.${state}`;
@@ -24,16 +25,18 @@ export function tabTitle(entry) {
 	return entry?.name || (entry?.cwd ? basename(entry.cwd) : entry?.sessionId);
 }
 
-/** 只读：列出全部成员与状态（list / dry-run 共用）。 */
+/** 校准已关闭的 WSL 标签页，再列出全部成员与状态（list / dry-run 共用）。 */
 export function inspect({ paths = workspacePaths(), owners, env = process.env, platform, distro, now, maxAgeMs, only, onlyIds } = {}) {
 	const { members, unsupported } = readMembers(paths);
+	const currentPlatform = platform ?? runtimePlatform(env);
+	reconcileClosedTabs({ members, paths, env, platform: currentPlatform });
 	const plan = buildRestorePlan({
 		members,
 		paths,
 		claimFn: (sessionId) => !!activeClaim(sessionId, paths),
 		bootId: currentBootId(),
 		owners: owners ?? scanSessionOwners({ env }),
-		platform: platform ?? runtimePlatform(env),
+		platform: currentPlatform,
 		distro: distro ?? env.WSL_DISTRO_NAME,
 		now,
 		maxAgeMs: maxAgeMs ?? maxAgeMsFromEnv(env),
@@ -47,7 +50,7 @@ export function inspect({ paths = workspacePaths(), owners, env = process.env, p
 export async function setTitle({ wezterm, terminal, stdout, entry, env = process.env, titleSetter = setTabTitle } = {}) {
 	const paneId = parsePaneId(stdout);
 	const title = tabTitle(entry);
-	if (!paneId || !title) return false;
+	if (paneId === undefined || !title) return false;
 	try {
 		return await titleSetter({ wezterm, terminal, paneId, title, env });
 	} catch {

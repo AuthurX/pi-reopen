@@ -3,7 +3,7 @@ import * as wezterm from "./wezterm.js";
 
 /**
  * 终端适配器注册表。每个适配器实现：
- *   id, discover(env, deps), spawnTab(args), setTabTitle(args),
+ *   id, discover(env, deps), spawnTab(args), setTabTitle(args), clientPid(args), clientPids(args), listPanes(args),
  *   paneExists(paneId, args), otherPanesExist(excludePaneId, args), currentPaneId(env)
  * 见 docs/TERMINALS.md。
  */

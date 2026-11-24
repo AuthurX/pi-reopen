@@ -34,6 +34,27 @@ export function paneExists(paneId, { terminal = terminalId(), wezterm, program, 
 	return adapter.paneExists(paneId, { program: program ?? wezterm, env, runner });
 }
 
+/** 当前 pane 所属 WezTerm GUI 客户端 PID。 */
+export function clientPid({ terminal = terminalId(), wezterm, program, paneId, env = process.env, runner } = {}) {
+	const adapter = getTerminal(terminal);
+	if (!adapter) return undefined;
+	return adapter.clientPid?.({ program: program ?? wezterm, paneId, env, runner });
+}
+
+/** 当前 WezTerm mux 上全部有效 GUI 客户端 PID。 */
+export function clientPids({ terminal = terminalId(), wezterm, program, env = process.env, runner } = {}) {
+	const adapter = getTerminal(terminal);
+	if (!adapter) return undefined;
+	return adapter.clientPids?.({ program: program ?? wezterm, env, runner });
+}
+
+/** 当前 WezTerm 实例的 pane 列表。 */
+export function listPanes({ terminal = terminalId(), wezterm, program, env = process.env, runner } = {}) {
+	const adapter = getTerminal(terminal);
+	if (!adapter) return undefined;
+	return adapter.listPanes?.({ program: program ?? wezterm, env, runner });
+}
+
 /** 除指定 pane 外是否还有其他 pane：true/false/undefined（无法判断）。 */
 export function otherPanesExist(excludePaneId, { terminal = terminalId(), wezterm, program, env = process.env, runner } = {}) {
 	const adapter = getTerminal(terminal);
