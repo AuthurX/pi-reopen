@@ -1,6 +1,6 @@
 # pi-reopen — 重开 WezTerm 后恢复 Pi 会话
 
-[English](README.md) | [简体中文](README.zh-CN.md) · [Pi 扩展目录](https://pi.dev/packages/@ellieyujin/pi-reopen) · [版本发布](https://github.com/AuthurX/pi-reopen/releases)
+[English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [한국어](README.ko-KR.md) · [Deutsch](README.de-DE.md) · [Français](README.fr-FR.md) · [Español](README.es-ES.md) · [Português (BR)](README.pt-BR.md) · [Русский](README.ru-RU.md) · [Pi 扩展目录](https://pi.dev/packages/@ellieyujin/pi-reopen) · [版本发布](https://github.com/AuthurX/pi-reopen/releases)
 
 **一条命令恢复之前打开的 Pi coding agent 会话、工作目录与对话，不必逐个寻找历史记录。**
 
